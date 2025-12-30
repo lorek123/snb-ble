@@ -1,0 +1,6 @@
+# Ruff configuration for storzandbickel-ble
+# Inherits from pyproject.toml but can override specific settings
+
+line-length = 88
+target-version = "py311"
+

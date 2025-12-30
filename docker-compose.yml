@@ -1,0 +1,35 @@
+services:
+  dev:
+    build:
+      context: .
+      target: builder
+    volumes:
+      - .:/app
+      - /app/.venv
+    working_dir: /app
+    command: tail -f /dev/null
+    environment:
+      - PYTHONPATH=/app/src
+
+  test:
+    build:
+      context: .
+      target: builder
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: pytest
+    environment:
+      - PYTHONPATH=/app/src
+
+  docs:
+    build:
+      context: .
+      target: builder
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: sphinx-build -b html docs docs/_build/html
+    environment:
+      - PYTHONPATH=/app/src
+

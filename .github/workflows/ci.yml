@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14.2"
+      - name: Set up Python venv for uv
+        run: uv venv
+      - name: Install dependencies
+        run: |
+          source .venv/bin/activate
+          uv pip install ruff mypy
+      - name: Run ruff
+        run: |
+          source .venv/bin/activate
+          ruff check .
+      - name: Run ruff format check
+        run: |
+          source .venv/bin/activate
+          ruff format --check .
+
+  type-check:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14.2"
+      - name: Set up Python venv for uv
+        run: uv venv
+      - name: Install dependencies
+        run: |
+          source .venv/bin/activate
+          uv pip install -e ".[dev]"
+      - name: Run mypy
+        run: |
+          source .venv/bin/activate
+          mypy src/
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14.2"
+      - name: Set up Python venv for uv
+        run: uv venv
+      - name: Install dependencies
+        run: |
+          source .venv/bin/activate
+          uv pip install -e ".[dev]"
+      - name: Run tests
+        run: |
+          source .venv/bin/activate
+          pytest --cov=storzandbickel_ble --cov-report=xml --cov-report=term
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+
