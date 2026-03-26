@@ -15,6 +15,7 @@ class DeviceType(IntEnum):
     VOLCANO = 1
     VENTY = 2
     CRAFTY = 3
+    VEAZY = 4
 
 
 class HeaterMode(IntEnum):
@@ -78,6 +79,9 @@ class VentyState(DeviceState):
     eco_mode_charge: bool = False
     eco_mode_voltage: bool = False
     boost_visualization: bool = False
+    brightness: int = Field(9, ge=1, le=9)
+    vibration_enabled: bool = True
+    boost_timeout_disabled: bool = False
 
 
 class CraftyState(DeviceState):
@@ -85,6 +89,7 @@ class CraftyState(DeviceState):
 
     current_temperature: float | None = Field(None, ge=40.0, le=210.0)
     target_temperature: float | None = Field(None, ge=40.0, le=210.0)
+    boost_temperature: float | None = Field(None, ge=1.0, le=99.0)
     battery_level: int = Field(0, ge=0, le=100)
     heater_on: bool = False
     boost_mode: bool = False

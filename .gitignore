@@ -157,3 +157,6 @@ Thumbs.db
 *.pyc
 .pytest_cache/
 
+# Local reverse-engineering research artifacts (do not commit)
+research/storz-bickel-app/
+

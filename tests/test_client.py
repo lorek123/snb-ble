@@ -81,3 +81,9 @@ async def test_find_device_not_found() -> None:
 
         with pytest.raises(DeviceNotFoundError):
             await client.find_device(address="AA:BB:CC:DD:EE:FF", timeout=0.1)
+
+
+def test_detect_device_type_veazy_and_venty_short_names() -> None:
+    """Test short-name device type detection for qvap devices."""
+    assert StorzBickelClient._detect_device_type("S&B VZ 123456") == DeviceType.VEAZY
+    assert StorzBickelClient._detect_device_type("S&B VY 654321") == DeviceType.VENTY

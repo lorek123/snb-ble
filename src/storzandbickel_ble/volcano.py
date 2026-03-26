@@ -53,9 +53,25 @@ _LOGGER = logging.getLogger(__name__)
 VOLCANO_WORKFLOW_PRESETS: dict[str, list[tuple[float, float, float]]] = {
     # Presets from web app workflow.js.
     "balloon": [(float(t), 0.0, 5.0) for t in range(170, 221, 5)],
-    "flow1": [(182.0, 10.0, 10.0), (192.0, 7.0, 12.0), (201.0, 5.0, 10.0), (220.0, 3.0, 10.0)],
-    "flow2": [(175.0, 0.0, 7.0), (180.0, 0.0, 7.0), (185.0, 0.0, 7.0), (190.0, 0.0, 7.0), (195.0, 0.0, 10.0)],
-    "flow3": [(174.0, 20.0, 8.0), (199.0, 0.0, 20.0), (213.0, 0.0, 10.0), (222.0, 0.0, 10.0)],
+    "flow1": [
+        (182.0, 10.0, 10.0),
+        (192.0, 7.0, 12.0),
+        (201.0, 5.0, 10.0),
+        (220.0, 3.0, 10.0),
+    ],
+    "flow2": [
+        (175.0, 0.0, 7.0),
+        (180.0, 0.0, 7.0),
+        (185.0, 0.0, 7.0),
+        (190.0, 0.0, 7.0),
+        (195.0, 0.0, 10.0),
+    ],
+    "flow3": [
+        (174.0, 20.0, 8.0),
+        (199.0, 0.0, 20.0),
+        (213.0, 0.0, 10.0),
+        (222.0, 0.0, 10.0),
+    ],
 }
 
 
@@ -402,7 +418,10 @@ class VolcanoDevice(BaseDevice):
                 while True:
                     await self.update_state()
                     current = self.state.current_temperature
-                    if current is not None and abs(current - target_temp) <= temperature_tolerance:
+                    if (
+                        current is not None
+                        and abs(current - target_temp) <= temperature_tolerance
+                    ):
                         break
                     await asyncio.sleep(poll_interval)
             if hold_seconds > 0:

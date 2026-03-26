@@ -98,7 +98,9 @@ class BaseDevice(ABC):
         return {
             "device_type": self.device_type.name,
             "connected": self.is_connected,
-            "address_suffix": self.address[-5:] if len(self.address) >= 5 else "unknown",
+            "address_suffix": self.address[-5:]
+            if len(self.address) >= 5
+            else "unknown",
             "name": self.name or "unknown",
             "availability_transition_count": self._availability_transition_count,
             "active_notifications": sorted(self._notification_handlers.keys()),

@@ -128,7 +128,12 @@ async def test_volcano_set_vibration_on_ready(mock_bleak_client) -> None:
 
 def test_volcano_workflow_presets_exist() -> None:
     """Test known workflow presets are available."""
-    assert set(VOLCANO_WORKFLOW_PRESETS.keys()) == {"balloon", "flow1", "flow2", "flow3"}
+    assert set(VOLCANO_WORKFLOW_PRESETS.keys()) == {
+        "balloon",
+        "flow1",
+        "flow2",
+        "flow3",
+    }
 
 
 @pytest.mark.asyncio
