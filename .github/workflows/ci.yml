@@ -23,7 +23,7 @@ jobs:
       - uses: astral-sh/setup-uv@v3
         with:
           version: "latest"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.14.2"
       - name: Set up Python venv for uv
@@ -49,7 +49,7 @@ jobs:
       - uses: astral-sh/setup-uv@v3
         with:
           version: "latest"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.14.2"
       - name: Set up Python venv for uv
@@ -71,7 +71,7 @@ jobs:
       - uses: astral-sh/setup-uv@v3
         with:
           version: "latest"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.14.2"
       - name: Set up Python venv for uv
