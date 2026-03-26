@@ -7,7 +7,7 @@ name = "storzandbickel-ble"
 version = "0.1.2"
 description = "Python library for controlling Storz & Bickel devices via Bluetooth Low Energy (BLE)"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 license = {text = "MIT"}
 authors = [
     {name = "Storz & Bickel BLE Contributors"}
@@ -18,8 +18,7 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Home Automation",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
@@ -56,7 +55,7 @@ include = [
 
 [tool.ruff]
 line-length = 88
-target-version = "py311"
+target-version = "py314"
 select = [
     "E",    # pycodestyle errors
     "W",    # pycodestyle warnings
@@ -111,7 +110,7 @@ indent-style = "space"
 known-first-party = ["storzandbickel_ble"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.14"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -142,7 +141,7 @@ addopts = [
     "--cov-report=term-missing",
     "--cov-report=html",
     "--cov-report=xml",
-    "--cov-fail-under=45",
+    "--cov-fail-under=50",
 ]
 markers = [
     "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",

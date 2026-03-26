@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from bleak import BleakClient
 
 from storzandbickel_ble.device import BaseDevice
-from storzandbickel_ble.exceptions import InvalidDataError
+from storzandbickel_ble.exceptions import CommandTimeoutError, InvalidDataError
 from storzandbickel_ble.models import (
     HeaterMode,
     TemperatureUnit,
@@ -20,6 +20,7 @@ from storzandbickel_ble.protocol import (
     VENTY_CHAR_DEVICE_NAME,
     VENTY_CHAR_MAIN,
     VENTY_CMD_FIND_DEVICE,
+    VENTY_CMD_DEVICE_ANALYSIS,
     VENTY_CMD_FIRMWARE_VERSION,
     VENTY_CMD_SERIAL_NUMBER,
     VENTY_CMD_SETTINGS,
@@ -34,6 +35,9 @@ from storzandbickel_ble.protocol import (
     VENTY_SETTING_ECO_MODE_CHARGE,
     VENTY_SETTING_ECO_MODE_VOLTAGE,
     VENTY_SETTING_UNIT,
+    VENTY_SETTINGS06_MASK_BOOST_TIMEOUT,
+    VENTY_SETTINGS06_MASK_BRIGHTNESS,
+    VENTY_SETTINGS06_MASK_VIBRATION,
     build_venty_command,
     clamp_temperature,
     decode_string,
@@ -70,6 +74,9 @@ class VentyDevice(BaseDevice):
             superboost_offset=0,
             battery_level=0,
             auto_shutoff_countdown=0,
+            brightness=9,
+            vibration_enabled=True,
+            boost_timeout_disabled=False,
         )
         self._response_event: asyncio.Event | None = None
         self._response_data: bytearray | None = None
@@ -104,7 +111,7 @@ class VentyDevice(BaseDevice):
         if not self._client.is_connected:
             await self._client.connect()
 
-        self._connected = True
+        self._set_connection_state(True)
 
         # Enable notifications for main characteristic
         # Service discovery happens automatically when we access characteristics
@@ -127,7 +134,7 @@ class VentyDevice(BaseDevice):
         await self._stop_all_notifications()
         if self._client is not None and self._client.is_connected:
             await self._client.disconnect()
-        self._connected = False
+        self._set_connection_state(False)
 
     async def update_state(self) -> None:
         """Update device state by reading from device."""
@@ -199,9 +206,9 @@ class VentyDevice(BaseDevice):
         try:
             await asyncio.wait_for(self._response_event.wait(), timeout=timeout)
             return self._response_data
-        except asyncio.TimeoutError:
-            _LOGGER.warning("Command response timeout for command 0x%02X", cmd)
-            return None
+        except asyncio.TimeoutError as e:
+            msg = f"Command response timeout for command 0x{cmd:02X}"
+            raise CommandTimeoutError(msg) from e
 
     async def set_target_temperature(self, temperature: float) -> None:
         """Set target temperature.
@@ -397,20 +404,78 @@ class VentyDevice(BaseDevice):
         packet = build_venty_command(VENTY_CMD_FIND_DEVICE)
         await self._write_characteristic(VENTY_CHAR_MAIN, packet, response=False)
 
+    async def set_brightness(self, brightness: int) -> None:
+        """Set display brightness (1-9)."""
+        if brightness < 1 or brightness > 9:
+            msg = f"Brightness must be between 1 and 9, got {brightness}"
+            raise ValueError(msg)
+
+        packet = bytearray(7)
+        packet[0] = VENTY_CMD_SETTINGS
+        packet[1] = VENTY_SETTINGS06_MASK_BRIGHTNESS
+        packet[2] = brightness
+        await self._write_characteristic(VENTY_CHAR_MAIN, packet, response=False)
+        state = self._get_state()
+        state.brightness = brightness
+
+    async def set_vibration(self, enabled: bool) -> None:
+        """Enable or disable vibration."""
+        packet = bytearray(7)
+        packet[0] = VENTY_CMD_SETTINGS
+        packet[1] = VENTY_SETTINGS06_MASK_VIBRATION
+        packet[5] = 1 if enabled else 0
+        await self._write_characteristic(VENTY_CHAR_MAIN, packet, response=False)
+        state = self._get_state()
+        state.vibration_enabled = enabled
+
+    async def set_boost_timeout_disabled(self, disabled: bool) -> None:
+        """Enable/disable boost and superboost timeout."""
+        packet = bytearray(7)
+        packet[0] = VENTY_CMD_SETTINGS
+        packet[1] = VENTY_SETTINGS06_MASK_BOOST_TIMEOUT
+        packet[6] = 1 if disabled else 0
+        await self._write_characteristic(VENTY_CHAR_MAIN, packet, response=False)
+        state = self._get_state()
+        state.boost_timeout_disabled = disabled
+
+    async def run_analysis(self) -> dict[str, object]:
+        """Run local Venty/Veazy diagnostics summary (no cloud upload)."""
+        await self.update_state()
+        await self._send_command(VENTY_CMD_DEVICE_ANALYSIS, wait_response=False)
+        state = self.state
+        warnings: list[str] = []
+        if state.brightness < 9:
+            warnings.append("Display brightness reduced from default.")
+        if not state.vibration_enabled:
+            warnings.append("Vibration is disabled.")
+        if state.eco_mode_charge:
+            warnings.append("Charge optimization is enabled (slower charging).")
+        if state.eco_mode_voltage:
+            warnings.append("Charge limit is enabled (~90% limit).")
+        if state.boost_timeout_disabled:
+            warnings.append("Boost/Superboost timeout is disabled.")
+        return {
+            "ok": True,
+            "warnings": warnings,
+            "errors": [],
+            "battery_level": state.battery_level,
+            "heater_mode": state.heater_mode.name,
+        }
+
     def _handle_main_notification(self, data: bytes) -> None:
         """Handle main characteristic notification."""
         state = self._get_state()
         try:
-            if len(data) < 15:
-                _LOGGER.warning(
-                    "Received notification with insufficient data: %d bytes", len(data)
-                )
-                return
-
             data_array = bytearray(data)
             cmd = data_array[0]
 
             if cmd == VENTY_CMD_STATUS_CONTROL:
+                if len(data_array) < 15:
+                    _LOGGER.warning(
+                        "Received status notification with insufficient data: %d bytes",
+                        len(data_array),
+                    )
+                    return
                 # Parse status/control response
                 current_temp_raw = data_array[2] | (data_array[3] << 8)
                 target_temp_raw = data_array[4] | (data_array[5] << 8)
@@ -455,6 +520,14 @@ class VentyDevice(BaseDevice):
                 # Parse serial number
                 if len(data_array) > 1:
                     state.serial_number = decode_string(data_array[1:])
+
+            elif cmd == VENTY_CMD_SETTINGS:
+                if len(data_array) > 2:
+                    state.brightness = data_array[2]
+                if len(data_array) > 5:
+                    state.vibration_enabled = bool(data_array[5])
+                if len(data_array) > 6:
+                    state.boost_timeout_disabled = bool(data_array[6])
 
             # Signal response received
             if self._response_event is not None:

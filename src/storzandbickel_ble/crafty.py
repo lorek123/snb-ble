@@ -13,6 +13,7 @@ from storzandbickel_ble.protocol import (
     CRAFTY_CHAR_AKKU_STATUS,
     CRAFTY_CHAR_AUTO_OFF,
     CRAFTY_CHAR_BATTERY,
+    CRAFTY_CHAR_BOOST_TEMP,
     CRAFTY_CHAR_CURRENT_TEMP,
     CRAFTY_CHAR_FIND_DEVICE,
     CRAFTY_CHAR_HEATER_OFF,
@@ -69,6 +70,7 @@ class CraftyDevice(BaseDevice):
         self._state = CraftyState(
             current_temperature=None,
             target_temperature=None,
+            boost_temperature=None,
             battery_level=0,
             led_brightness=50,
             auto_off_time=0,
@@ -106,7 +108,7 @@ class CraftyDevice(BaseDevice):
         if not self._client.is_connected:
             await self._client.connect()
 
-        self._connected = True
+        self._set_connection_state(True)
 
         # Read minimal initial state (fast connection)
         # Service discovery happens automatically on first characteristic access
@@ -169,7 +171,7 @@ class CraftyDevice(BaseDevice):
         await self._stop_all_notifications()
         if self._client is not None and self._client.is_connected:
             await self._client.disconnect()
-        self._connected = False
+        self._set_connection_state(False)
 
     async def _read_minimal_state(self) -> None:
         """Read minimal state for fast connection (only essential characteristics)."""
@@ -351,6 +353,14 @@ class CraftyDevice(BaseDevice):
         state = self._get_state()
         state.target_temperature = temp
 
+    async def set_boost_temperature(self, boost_temperature: float) -> None:
+        """Set boost temperature offset (1-99°C)."""
+        boost = int(max(1, min(99, round(boost_temperature))))
+        data = encode_temperature(float(boost))
+        await self._write_characteristic(CRAFTY_CHAR_BOOST_TEMP, data)
+        state = self._get_state()
+        state.boost_temperature = float(boost)
+
     async def turn_heater_on(self) -> None:
         """Turn heater on.
 
@@ -456,6 +466,30 @@ class CraftyDevice(BaseDevice):
     async def find_device(self) -> None:
         """Trigger find device (vibration/LED alert)."""
         await self._write_characteristic(CRAFTY_CHAR_FIND_DEVICE, b"\x01")
+
+    async def run_analysis(self) -> dict[str, object]:
+        """Run local Crafty diagnostics summary (no cloud upload)."""
+        await self.update_state()
+        state = self.state
+        warnings: list[str] = []
+        errors: list[str] = []
+
+        if state.led_brightness < 10:
+            warnings.append("LED brightness is low.")
+        if not state.vibration_enabled:
+            warnings.append("Vibration is disabled.")
+        if not state.device_active:
+            warnings.append("Device is not active.")
+        if state.project_status_register & 0x2008:
+            errors.append("Project status indicates error condition.")
+
+        return {
+            "ok": not errors,
+            "warnings": warnings,
+            "errors": errors,
+            "project_status_register": state.project_status_register,
+            "project_status_register_2": state.project_status_register_2,
+        }
 
     def _handle_temperature_notification(self, data: bytes) -> None:
         """Handle temperature notification."""

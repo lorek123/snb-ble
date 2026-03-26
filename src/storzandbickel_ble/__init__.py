@@ -7,10 +7,14 @@ A Python library for controlling Storz & Bickel vaporizers
 from storzandbickel_ble.client import StorzBickelClient
 from storzandbickel_ble.crafty import CraftyDevice
 from storzandbickel_ble.exceptions import (
+    CharacteristicReadError,
+    CharacteristicWriteError,
+    CommandTimeoutError,
     ConnectionError,
     DeviceNotFoundError,
     FirmwareUpdateError,
     InvalidDataError,
+    NotificationSetupError,
     StorzBickelError,
     TimeoutError,
 )
@@ -28,6 +32,10 @@ __all__ = [
     "ConnectionError",
     "DeviceNotFoundError",
     "InvalidDataError",
+    "CharacteristicReadError",
+    "CharacteristicWriteError",
+    "NotificationSetupError",
     "TimeoutError",
+    "CommandTimeoutError",
     "FirmwareUpdateError",
 ]

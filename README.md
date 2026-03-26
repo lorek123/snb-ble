@@ -1,14 +1,16 @@
 # Storz & Bickel BLE Python Library
 
-A Python library for controlling Storz & Bickel vaporizers (Volcano Hybrid, Venty, and Crafty/Crafty+) via Bluetooth Low Energy (BLE).
+A Python library for controlling Storz & Bickel vaporizers (Volcano Hybrid, Venty/Veazy, and Crafty/Crafty+) via Bluetooth Low Energy (BLE).
 
 ## Features
 
-- **Full Device Support**: Control Volcano Hybrid, Venty, and Crafty/Crafty+ devices
+- **Device Support**: Volcano Hybrid, Venty, Veazy (qvap path), and Crafty/Crafty+
 - **Async/Await**: Built with modern Python async/await patterns
 - **Type Safe**: Full type hints and Pydantic models for data validation
 - **Home Assistant Ready**: Follows Home Assistant best practices
-- **Comprehensive**: Supports all device features including temperature control, status monitoring, and configuration
+- **Controls**: Temperature/heater/pump, boost/superboost, and settings APIs
+- **Diagnostics**: Local `run_analysis()` helpers (no cloud upload)
+- **Workflows**: Volcano preset workflow execution (`balloon`, `flow1`, `flow2`, `flow3`)
 
 ## Installation
 
@@ -60,22 +62,14 @@ async def main():
 asyncio.run(main())
 ```
 
-### Testing with Real Device
+### Home Assistant-Oriented Quickstart
 
-To test with a real Crafty+ device, use the example script:
+The library patterns map cleanly to HA coordinator/entity flows:
 
-```bash
-uv run python examples/test_crafty.py
-```
-
-This will:
-- Scan for your device
-- Connect automatically
-- Display current state
-- Test various controls
-- Monitor temperature updates in real-time
-
-See `examples/README.md` for more details.
+- discover/connect once
+- keep notifications enabled as the primary state path
+- call `update_state()` for startup reconciliation or recovery
+- use explicit exceptions and `availability_transition_count` for clean availability handling
 
 ## Device-Specific Examples
 
@@ -116,87 +110,88 @@ async def main():
 asyncio.run(main())
 ```
 
-### Venty
+For additional per-device examples (Venty, Veazy, Volcano), see `docs/usage.rst`.
+
+## Workflow and Analysis APIs
 
 ```python
 import asyncio
 from storzandbickel_ble import StorzBickelClient
-from storzandbickel_ble.models import DeviceType
 
 async def main():
     client = StorzBickelClient()
-    
-    # Scan for Venty devices
-    devices = await client.scan(timeout=10.0, device_type=DeviceType.VENTY)
-    
-    if devices:
-        # Connect to first Venty device
-        venty = await client.connect_device(devices[0])
-        
-        # Update state to get current values
-        await venty.update_state()
-        
-        # Check temperatures
-        print(f"Current temperature: {venty.state.current_temperature}°C")
-        print(f"Target temperature: {venty.state.target_temperature}°C")
-        
-        # Set target temperature
-        await venty.set_target_temperature(190.0)
-        print(f"Set target temperature to 190°C")
-        
-        # Verify the change
-        await venty.update_state()
-        print(f"New target temperature: {venty.state.target_temperature}°C")
-        
-        await venty.disconnect()
+    volcano = await client.connect_by_name("S&B VOLCANO")
 
-asyncio.run(main())
-```
+    # Volcano workflow presets: balloon, flow1, flow2, flow3
+    await volcano.run_workflow_preset("flow1")
 
-### Volcano Hybrid
+    # Local diagnostics summary (no cloud upload)
+    report = await volcano.run_analysis()
+    print(report["ok"], report["warnings"], report["errors"])
 
-```python
-import asyncio
-from storzandbickel_ble import StorzBickelClient
-from storzandbickel_ble.models import DeviceType
-
-async def main():
-    client = StorzBickelClient()
-    
-    # Scan for Volcano devices
-    devices = await client.scan(timeout=10.0, device_type=DeviceType.VOLCANO)
-    
-    if devices:
-        # Connect to first Volcano device
-        volcano = await client.connect_device(devices[0])
-        
-        # Update state to get current values
-        await volcano.update_state()
-        
-        # Check temperatures
-        print(f"Current temperature: {volcano.state.current_temperature}°C")
-        print(f"Target temperature: {volcano.state.target_temperature}°C")
-        
-        # Set target temperature
-        await volcano.set_target_temperature(200.0)
-        print(f"Set target temperature to 200°C")
-        
-        # Verify the change
-        await volcano.update_state()
-        print(f"New target temperature: {volcano.state.target_temperature}°C")
-        
-        await volcano.disconnect()
+    await volcano.disconnect()
 
 asyncio.run(main())
 ```
 
 ## Device Support Matrix
 
-| Device | Temperature Control | Heater Control | Battery | Air Pump | Boost Mode | Vibration |
-|--------|-------------------|----------------|---------|----------|------------|-----------|
-| Volcano Hybrid | ✅ | ✅ | ❌ | ✅ | ❌ | ✅ |
-| Venty | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
-| Crafty/Crafty+ | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
+| Device | Temperature | Heater | Battery | Pump | Boost/Superboost | Vibration | Brightness | Workflow Presets | Local Analysis |
+|--------|------------|--------|---------|------|------------------|-----------|------------|------------------|----------------|
+| Volcano Hybrid | ✅ | ✅ | ❌ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| Venty | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ❌ | ✅ |
+| Veazy | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ❌ | ✅ |
+| Crafty/Crafty+ | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ❌ | ✅ |
+
+## Supported Functions by Family
+
+| Function | Volcano | Venty | Veazy | Crafty |
+|----------|---------|-------|-------|--------|
+| Discovery and connect | ✅ | ✅ | ✅ | ✅ |
+| Real-time notification state | ✅ | ✅ | ✅ | ✅ |
+| Temperature target control | ✅ | ✅ | ✅ | ✅ |
+| Heater control | ✅ | ✅ | ✅ | ✅ |
+| Pump control | ✅ | ❌ | ❌ | ❌ |
+| Brightness and vibration settings | ✅ | ✅ | ✅ | ✅ |
+| Local diagnostics (`run_analysis`) | ✅ | ✅ | ✅ | ✅ |
+| Workflow presets | ✅ | ❌ | ❌ | ❌ |
+
+## Data Update Model
+
+- Notification-driven updates are enabled on connect for supported characteristics.
+- `update_state()` performs explicit reads/commands and is useful for an immediate refresh.
+- Home Assistant integrations can treat notifications as the primary state stream and call `update_state()` for recovery or reconciliation.
+
+## Concurrency and Command Semantics
+
+- Device-level BLE I/O is serialized internally to avoid overlapping reads/writes.
+- Commands that require responses (for example, qvap command exchange) raise `CommandTimeoutError` when the response does not arrive in time.
+- `availability_transition_count` tracks connect/disconnect transitions to help downstream integrations avoid noisy up/down logging.
+
+## Diagnostics Snapshot API
+
+Each device exposes a sanitized diagnostics payload via:
+
+```python
+snapshot = device.get_diagnostics_snapshot()
+```
+
+Snapshot payloads intentionally omit serial numbers from `state` to reduce sensitive data exposure in logs and diagnostics exports.
+
+## Known Limitations
+
+- Firmware update workflows are not implemented in this library.
+- Vendor cloud upload paths are intentionally out of scope.
+- Some frontend-specific maintenance/analysis flows are not yet mirrored as first-class Python APIs.
+- BLE behavior can vary by adapter, OS, and stack implementation.
+
+## Troubleshooting
+
+- Ensure your BLE adapter is enabled and supports Bluetooth Low Energy.
+- If a device is not discovered, retry scanning and confirm it is advertising.
+- For flaky connections, disconnect and reconnect before issuing control commands.
+- If command operations timeout, retry with a higher timeout and reduced command burst frequency.
+- Use `get_diagnostics_snapshot()` when reporting issues to provide a sanitized runtime context.
 
 ## Documentation
 
@@ -232,20 +227,20 @@ pip install -e ".[dev]"
 ### Running Tests
 
 ```bash
-pytest
+uv run pytest
 ```
 
 ### Linting
 
 ```bash
-ruff check .
-ruff format .
+uv run ruff check .
+uv run ruff format .
 ```
 
 ### Type Checking
 
 ```bash
-mypy src/
+uv run mypy src
 ```
 
 ## Docker

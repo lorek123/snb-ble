@@ -1,11 +1,17 @@
 """Base device class for Storz & Bickel BLE devices."""
 
+import asyncio
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 from bleak import BleakClient, BleakGATTCharacteristic
 
-from storzandbickel_ble.exceptions import ConnectionError, InvalidDataError
+from storzandbickel_ble.exceptions import (
+    CharacteristicReadError,
+    CharacteristicWriteError,
+    ConnectionError,
+    NotificationSetupError,
+)
 from storzandbickel_ble.models import DeviceState, DeviceType
 
 if TYPE_CHECKING:
@@ -34,6 +40,8 @@ class BaseDevice(ABC):
         self._state: DeviceState | None = None
         self._notification_handlers: dict[str, "Callable[[bytes], None]"] = {}
         self._connected = False
+        self._io_lock = asyncio.Lock()
+        self._availability_transition_count = 0
 
     @property
     @abstractmethod
@@ -52,6 +60,11 @@ class BaseDevice(ABC):
             self._connected and self._client is not None and self._client.is_connected
         )
 
+    @property
+    def availability_transition_count(self) -> int:
+        """Number of availability transitions since object creation."""
+        return self._availability_transition_count
+
     @abstractmethod
     async def connect(self) -> None:
         """Connect to device."""
@@ -63,6 +76,34 @@ class BaseDevice(ABC):
     @abstractmethod
     async def update_state(self) -> None:
         """Update device state by reading from device."""
+
+    def _set_connection_state(self, connected: bool) -> None:
+        """Update internal + state-model connection status consistently."""
+        previous = self._connected
+        self._connected = connected
+
+        if self._state is not None:
+            self._state.connected = connected
+
+        if previous != connected:
+            self._availability_transition_count += 1
+
+    def get_diagnostics_snapshot(self) -> dict[str, object]:
+        """Return a sanitized diagnostics snapshot for integration debugging."""
+        state_dump: dict[str, object] = {}
+        if self._state is not None:
+            state_dump = self._state.model_dump()
+            state_dump.pop("serial_number", None)
+
+        return {
+            "device_type": self.device_type.name,
+            "connected": self.is_connected,
+            "address_suffix": self.address[-5:] if len(self.address) >= 5 else "unknown",
+            "name": self.name or "unknown",
+            "availability_transition_count": self._availability_transition_count,
+            "active_notifications": sorted(self._notification_handlers.keys()),
+            "state": state_dump,
+        }
 
     async def _read_characteristic(self, uuid: str) -> bytearray:
         """Read a characteristic value.
@@ -82,11 +123,12 @@ class BaseDevice(ABC):
             raise ConnectionError(msg)
 
         try:
-            data = await self._client.read_gatt_char(uuid)
-            return bytearray(data)
+            async with self._io_lock:
+                data = await self._client.read_gatt_char(uuid)
+                return bytearray(data)
         except Exception as e:
             msg = f"Failed to read characteristic {uuid}: {e}"
-            raise InvalidDataError(msg) from e
+            raise CharacteristicReadError(msg) from e
 
     async def _write_characteristic(
         self,
@@ -110,10 +152,11 @@ class BaseDevice(ABC):
             raise ConnectionError(msg)
 
         try:
-            await self._client.write_gatt_char(uuid, data, response=response)
+            async with self._io_lock:
+                await self._client.write_gatt_char(uuid, data, response=response)
         except Exception as e:
             msg = f"Failed to write characteristic {uuid}: {e}"
-            raise InvalidDataError(msg) from e
+            raise CharacteristicWriteError(msg) from e
 
     async def _start_notifications(
         self,
@@ -142,11 +185,12 @@ class BaseDevice(ABC):
             handler(bytes(data))
 
         try:
-            await self._client.start_notify(uuid, bleak_handler)
-            self._notification_handlers[uuid] = handler
+            async with self._io_lock:
+                await self._client.start_notify(uuid, bleak_handler)
+                self._notification_handlers[uuid] = handler
         except Exception as e:
             msg = f"Failed to start notifications for {uuid}: {e}"
-            raise InvalidDataError(msg) from e
+            raise NotificationSetupError(msg) from e
 
     async def _stop_notifications(self, uuid: str) -> None:
         """Stop notifications for a characteristic.
@@ -162,11 +206,13 @@ class BaseDevice(ABC):
             raise ConnectionError(msg)
 
         try:
-            await self._client.stop_notify(uuid)
+            async with self._io_lock:
+                await self._client.stop_notify(uuid)
+                self._notification_handlers.pop(uuid, None)
+        except Exception as e:
             self._notification_handlers.pop(uuid, None)
-        except Exception:
-            # Ignore errors when stopping notifications
-            self._notification_handlers.pop(uuid, None)
+            msg = f"Failed to stop notifications for {uuid}: {e}"
+            raise NotificationSetupError(msg) from e
 
     async def _stop_all_notifications(self) -> None:
         """Stop all active notifications."""
@@ -174,4 +220,7 @@ class BaseDevice(ABC):
             return
 
         for uuid in list(self._notification_handlers.keys()):
-            await self._stop_notifications(uuid)
+            try:
+                await self._stop_notifications(uuid)
+            except NotificationSetupError:
+                continue

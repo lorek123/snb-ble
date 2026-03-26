@@ -17,8 +17,24 @@ class InvalidDataError(StorzBickelError):
     """Raised when received data is invalid or cannot be parsed."""
 
 
+class CharacteristicReadError(InvalidDataError):
+    """Raised when reading a BLE characteristic fails."""
+
+
+class CharacteristicWriteError(InvalidDataError):
+    """Raised when writing a BLE characteristic fails."""
+
+
+class NotificationSetupError(InvalidDataError):
+    """Raised when notification setup or teardown fails."""
+
+
 class TimeoutError(StorzBickelError):
     """Raised when an operation times out."""
+
+
+class CommandTimeoutError(TimeoutError):
+    """Raised when a command response is not received within timeout."""
 
 
 class FirmwareUpdateError(StorzBickelError):

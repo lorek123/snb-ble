@@ -16,7 +16,10 @@ from storzandbickel_ble.models import DeviceInfo, DeviceType
 from storzandbickel_ble.protocol import (
     CONNECTION_TIMEOUT,
     DEVICE_NAME_CRAFTY,
+    DEVICE_NAME_VEAZY,
+    DEVICE_NAME_VEAZY_SHORT,
     DEVICE_NAME_VENTY,
+    DEVICE_NAME_VENTY_SHORT,
     DEVICE_NAME_VOLCANO,
 )
 
@@ -47,7 +50,9 @@ class StorzBickelClient:
         # Check for specific device names first
         if DEVICE_NAME_VOLCANO in name_upper:
             return DeviceType.VOLCANO
-        if DEVICE_NAME_VENTY in name_upper:
+        if DEVICE_NAME_VEAZY in name_upper or DEVICE_NAME_VEAZY_SHORT in name_upper:
+            return DeviceType.VEAZY
+        if DEVICE_NAME_VENTY in name_upper or DEVICE_NAME_VENTY_SHORT in name_upper:
             return DeviceType.VENTY
         if DEVICE_NAME_CRAFTY in name_upper:
             return DeviceType.CRAFTY
@@ -390,6 +395,15 @@ class StorzBickelClient:
                     client=client,
                     name=device_name,
                 )
+            elif device_info.device_type == DeviceType.VEAZY:
+                from storzandbickel_ble.venty import VentyDevice
+
+                # Veazy uses the same qvap protocol path as Venty.
+                device = VentyDevice(
+                    device_info.address,
+                    client=client,
+                    name=device_name,
+                )
             elif device_info.device_type == DeviceType.CRAFTY:
                 from storzandbickel_ble.crafty import CraftyDevice
 
@@ -417,6 +431,8 @@ class StorzBickelClient:
         except asyncio.TimeoutError as e:
             msg = f"Connection timeout after {timeout}s"
             raise TimeoutError(msg) from e
+        except (DeviceNotFoundError, TimeoutError):
+            raise
         except Exception as e:
             msg = f"Failed to connect: {e}"
             raise ConnectionError(msg) from e

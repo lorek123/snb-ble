@@ -1,5 +1,6 @@
 """Volcano Hybrid device implementation."""
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING
 
@@ -7,7 +8,7 @@ from bleak import BleakClient
 
 from storzandbickel_ble.device import BaseDevice
 from storzandbickel_ble.exceptions import InvalidDataError
-from storzandbickel_ble.models import DeviceType, VolcanoState
+from storzandbickel_ble.models import DeviceType, TemperatureUnit, VolcanoState
 from storzandbickel_ble.protocol import (
     TEMP_MAX_VOLCANO,
     TEMP_MIN_VOLCANO,
@@ -16,6 +17,8 @@ from storzandbickel_ble.protocol import (
     VOLCANO_CHAR_FIRMWARE_VERSION,
     VOLCANO_CHAR_HEATER_OFF,
     VOLCANO_CHAR_HEATER_ON,
+    VOLCANO_CHAR_HISTORY_1,
+    VOLCANO_CHAR_HISTORY_2,
     VOLCANO_CHAR_HEATING_HOURS,
     VOLCANO_CHAR_HEATING_MINUTES,
     VOLCANO_CHAR_LED_BRIGHTNESS,
@@ -27,9 +30,11 @@ from storzandbickel_ble.protocol import (
     VOLCANO_CHAR_STATUS_REGISTER_3,
     VOLCANO_CHAR_TARGET_TEMP,
     VOLCANO_STATUS1_AUTO_SHUTDOWN,
+    VOLCANO_STATUS1_ERROR_BITS,
     VOLCANO_STATUS1_HEATER_ON,
     VOLCANO_STATUS1_PUMP_ON,
     VOLCANO_STATUS2_DISPLAY_COOLING,
+    VOLCANO_STATUS2_ERROR_BITS,
     VOLCANO_STATUS2_FAHRENHEIT,
     VOLCANO_STATUS3_VIBRATION_READY,
     clamp_temperature,
@@ -44,6 +49,14 @@ if TYPE_CHECKING:
     pass
 
 _LOGGER = logging.getLogger(__name__)
+
+VOLCANO_WORKFLOW_PRESETS: dict[str, list[tuple[float, float, float]]] = {
+    # Presets from web app workflow.js.
+    "balloon": [(float(t), 0.0, 5.0) for t in range(170, 221, 5)],
+    "flow1": [(182.0, 10.0, 10.0), (192.0, 7.0, 12.0), (201.0, 5.0, 10.0), (220.0, 3.0, 10.0)],
+    "flow2": [(175.0, 0.0, 7.0), (180.0, 0.0, 7.0), (185.0, 0.0, 7.0), (190.0, 0.0, 7.0), (195.0, 0.0, 10.0)],
+    "flow3": [(174.0, 20.0, 8.0), (199.0, 0.0, 20.0), (213.0, 0.0, 10.0), (222.0, 0.0, 10.0)],
+}
 
 
 class VolcanoDevice(BaseDevice):
@@ -102,7 +115,7 @@ class VolcanoDevice(BaseDevice):
         if not self._client.is_connected:
             await self._client.connect()
 
-        self._connected = True
+        self._set_connection_state(True)
 
         # Service discovery happens automatically when we access characteristics
         # Read initial state
@@ -139,7 +152,7 @@ class VolcanoDevice(BaseDevice):
         await self._stop_all_notifications()
         if self._client is not None and self._client.is_connected:
             await self._client.disconnect()
-        self._connected = False
+        self._set_connection_state(False)
 
     async def update_state(self) -> None:
         """Update device state by reading from device."""
@@ -330,6 +343,110 @@ class VolcanoDevice(BaseDevice):
         state = self._get_state()
         state.status_register_3 = value
         state.vibration_on_ready = bool(value & VOLCANO_STATUS3_VIBRATION_READY)
+
+    async def set_temperature_unit(self, unit: TemperatureUnit) -> None:
+        """Set display temperature unit."""
+        state = self._get_state()
+        value = state.status_register_2
+        if unit == TemperatureUnit.FAHRENHEIT:
+            value |= VOLCANO_STATUS2_FAHRENHEIT
+        else:
+            value &= ~VOLCANO_STATUS2_FAHRENHEIT
+        await self.set_status_register_2(value)
+
+    async def set_display_on_cooling(self, enabled: bool) -> None:
+        """Enable/disable showing temperature during cool-down."""
+        state = self._get_state()
+        value = state.status_register_2
+        if enabled:
+            value |= VOLCANO_STATUS2_DISPLAY_COOLING
+        else:
+            value &= ~VOLCANO_STATUS2_DISPLAY_COOLING
+        await self.set_status_register_2(value)
+
+    async def set_vibration_on_ready(self, enabled: bool) -> None:
+        """Enable/disable vibration on setpoint reached."""
+        state = self._get_state()
+        value = state.status_register_3
+        if enabled:
+            value |= VOLCANO_STATUS3_VIBRATION_READY
+        else:
+            value &= ~VOLCANO_STATUS3_VIBRATION_READY
+        await self.set_status_register_3(value)
+
+    async def run_workflow_preset(
+        self,
+        preset: str,
+        wait_for_temperature: bool = True,
+        temperature_tolerance: float = 1.0,
+        poll_interval: float = 1.5,
+    ) -> None:
+        """Run a Volcano workflow preset.
+
+        Args:
+            preset: One of `balloon`, `flow1`, `flow2`, `flow3`.
+            wait_for_temperature: Wait for setpoint before hold/pump phase.
+            temperature_tolerance: Acceptable absolute delta from target.
+            poll_interval: Poll interval while waiting for setpoint.
+        """
+        if preset not in VOLCANO_WORKFLOW_PRESETS:
+            msg = f"Unknown workflow preset: {preset}"
+            raise ValueError(msg)
+
+        if not self.state.heater_on:
+            await self.turn_heater_on()
+
+        for target_temp, hold_seconds, pump_seconds in VOLCANO_WORKFLOW_PRESETS[preset]:
+            await self.set_target_temperature(target_temp)
+            if wait_for_temperature:
+                while True:
+                    await self.update_state()
+                    current = self.state.current_temperature
+                    if current is not None and abs(current - target_temp) <= temperature_tolerance:
+                        break
+                    await asyncio.sleep(poll_interval)
+            if hold_seconds > 0:
+                await asyncio.sleep(hold_seconds)
+            await self.turn_pump_on()
+            await asyncio.sleep(max(0.5, pump_seconds))
+            await self.turn_pump_off()
+
+    async def run_analysis(self) -> dict[str, object]:
+        """Run local Volcano diagnostics summary (no cloud upload)."""
+        await self.update_state()
+        state = self.state
+        warnings: list[str] = []
+        errors: list[str] = []
+
+        if state.led_brightness < 3:
+            warnings.append("Display brightness is low.")
+        if not state.display_on_cooling:
+            warnings.append("Display-on-cooling is disabled.")
+        if not state.vibration_on_ready:
+            warnings.append("Vibration-on-ready is disabled.")
+        if state.status_register_1 & VOLCANO_STATUS1_ERROR_BITS:
+            errors.append("Status register 1 indicates device error flags.")
+        if state.status_register_2 & VOLCANO_STATUS2_ERROR_BITS:
+            errors.append("Status register 2 indicates device error flags.")
+
+        history_1 = ""
+        history_2 = ""
+        try:
+            history_1 = (await self._read_characteristic(VOLCANO_CHAR_HISTORY_1)).hex()
+            history_2 = (await self._read_characteristic(VOLCANO_CHAR_HISTORY_2)).hex()
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("History registers unavailable during analysis: %s", err)
+
+        return {
+            "ok": not errors,
+            "warnings": warnings,
+            "errors": errors,
+            "history_1": history_1,
+            "history_2": history_2,
+            "status_register_1": state.status_register_1,
+            "status_register_2": state.status_register_2,
+            "status_register_3": state.status_register_3,
+        }
 
     def _handle_temperature_notification(self, data: bytes) -> None:
         """Handle temperature notification."""
