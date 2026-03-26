@@ -85,7 +85,7 @@ jobs:
           source .venv/bin/activate
           pytest --cov=storzandbickel_ble --cov-report=xml --cov-report=term
       - name: Upload coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v6
         with:
           file: ./coverage.xml
           flags: unittests
