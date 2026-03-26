@@ -5,6 +5,11 @@ on:
     tags:
       - 'v*'
 
+env:
+  # Opt-in to newer GitHub-hosted runner JavaScript runtime
+  # to avoid deprecation warnings/errors for actions still running on Node.js 20.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   release:
     name: Build and Release
