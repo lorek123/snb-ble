@@ -21,7 +21,7 @@ from storzandbickel_ble.exceptions import (
 from storzandbickel_ble.venty import VentyDevice
 from storzandbickel_ble.volcano import VolcanoDevice
 
-__version__ = "0.1.2"
+__version__ = "0.1.4"
 
 __all__ = [
     "StorzBickelClient",
