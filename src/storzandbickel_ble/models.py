@@ -1,9 +1,9 @@
 """Data models for Storz & Bickel BLE devices."""
 
 from enum import IntEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 if TYPE_CHECKING:
     pass
@@ -111,10 +111,16 @@ class CraftyState(DeviceState):
 class DeviceInfo(BaseModel):
     """Device information from discovery."""
 
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     name: str
     address: str
     device_type: DeviceType
     rssi: int | None = None
+    # Raw bleak BLEDevice — populated by scan() so connect_device() can pass it to
+    # establish_connection() for proxy-aware, retry-capable connection setup.
+    # Not serialised; excluded from model comparisons.
+    ble_device: Any = Field(default=None, exclude=True, repr=False)
 
     @field_validator("address")
     @classmethod

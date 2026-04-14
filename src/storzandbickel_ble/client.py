@@ -154,6 +154,7 @@ class StorzBickelClient:
                     address=address,
                     device_type=detected_type,
                     rssi=device.rssi if hasattr(device, "rssi") else None,
+                    ble_device=device,
                 )
                 devices.append(device_info)
                 _LOGGER.debug(
@@ -273,11 +274,25 @@ class StorzBickelClient:
         )
 
         try:
-            # Create BleakClient
-            client = BleakClient(device_info.address, timeout=timeout)
+            # Prefer establish_connection() from bleak-retry-connector when the raw BLEDevice
+            # is available — it handles adapter selection, connection-slot management, and
+            # retry logic that is essential for reliable operation through ESPHome BLE proxies.
+            ble_device = device_info.ble_device
+            try:
+                from bleak_retry_connector import establish_connection as _establish
 
-            # Connect
-            await asyncio.wait_for(client.connect(), timeout=timeout)
+                if ble_device is not None:
+                    client = await _establish(
+                        BleakClient,
+                        ble_device,
+                        device_info.name,
+                    )
+                else:
+                    # No BLEDevice (e.g. connect_by_address with skip_discovery) — fall through
+                    raise ImportError
+            except ImportError:
+                client = BleakClient(device_info.address, timeout=timeout)
+                await asyncio.wait_for(client.connect(), timeout=timeout)
 
             # If device name is unknown, read it from the device to verify it's an S&B device
             device_name = device_info.name

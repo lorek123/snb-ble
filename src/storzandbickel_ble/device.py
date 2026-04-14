@@ -179,6 +179,22 @@ class BaseDevice(ABC):
             msg = "Device not connected"
             raise ConnectionError(msg)
 
+        # Guard: only subscribe if the characteristic advertises notify or indicate.
+        # Calling start_notify on a read-only characteristic generates a guaranteed warning
+        # on every connection and wastes GATT round-trips — through a BLE proxy this can
+        # exhaust TX buffer slots and cause other devices on the same proxy to drop.
+        try:
+            char = self._client.services.get_characteristic(uuid)
+            if char is not None and not ({"notify", "indicate"} & set(char.properties)):
+                _LOGGER.debug(
+                    "Characteristic %s has no notify/indicate property (%s); skipping subscription",
+                    uuid,
+                    char.properties,
+                )
+                return
+        except Exception:
+            pass  # Services not yet discovered or other transient error — let start_notify handle it
+
         def bleak_handler(
             characteristic: BleakGATTCharacteristic,
             data: bytearray,
