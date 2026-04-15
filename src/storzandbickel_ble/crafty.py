@@ -181,8 +181,13 @@ class CraftyDevice(BaseDevice):
             try:
                 data = await self._read_characteristic(CRAFTY_CHAR_STATUS_REGISTER)
                 if len(data) >= 10:
+                    # Full format: 8-byte serial number + 2-byte status register
                     state.serial_number = decode_string(data[:8])
                     state.status_register = decode_uint16(data[8:10])
+                elif len(data) >= 2:
+                    # Short format: 2-byte status register only (some firmware versions)
+                    state.status_register = decode_uint16(data[:2])
+                if len(data) >= 2:
                     state.heater_on = bool(
                         state.status_register & CRAFTY_STATUS_HEATER_ON,
                     )
@@ -231,10 +236,13 @@ class CraftyDevice(BaseDevice):
             try:
                 data = await self._read_characteristic(CRAFTY_CHAR_STATUS_REGISTER)
                 if len(data) >= 10:
-                    # First 8 bytes are serial number
+                    # Full format: 8-byte serial number + 2-byte status register
                     state.serial_number = decode_string(data[:8])
-                    # Last 2 bytes are status register
                     state.status_register = decode_uint16(data[8:10])
+                elif len(data) >= 2:
+                    # Short format: 2-byte status register only (some firmware versions)
+                    state.status_register = decode_uint16(data[:2])
+                if len(data) >= 2:
                     state.heater_on = bool(
                         state.status_register & CRAFTY_STATUS_HEATER_ON,
                     )
@@ -517,8 +525,12 @@ class CraftyDevice(BaseDevice):
         try:
             data_array = bytearray(data)
             if len(data_array) >= 10:
-                # Last 2 bytes are status register
+                # Full format: 8-byte serial number + 2-byte status register
                 state.status_register = decode_uint16(data_array[8:10])
+            elif len(data_array) >= 2:
+                # Short format: 2-byte status register only (some firmware versions)
+                state.status_register = decode_uint16(data_array[:2])
+            if len(data_array) >= 2:
                 state.heater_on = bool(
                     state.status_register & CRAFTY_STATUS_HEATER_ON,
                 )
