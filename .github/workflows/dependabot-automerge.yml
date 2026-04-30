@@ -30,7 +30,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
 
           # Returns 0 (allow merge) if bumping pkg to new_ver does not exceed HA's pinned version.
           # Packages not mentioned in HA constraints (dev tools, etc.) are always allowed.
@@ -141,6 +141,9 @@ jobs:
               continue
             fi
 
-            echo "  All $total check(s) passed — merging"
-            gh pr merge "$number" --squash --delete-branch --repo "$REPO"
+            echo "  All $total check(s) passed — approving and merging"
+            gh pr review "$number" --approve --repo "$REPO" \
+              --body "Auto-approved by dependabot-automerge workflow: CI green and version within HA constraints."
+            gh pr merge "$number" --squash --delete-branch --repo "$REPO" \
+              || echo "  WARNING: merge failed for PR #$number — may need manual merge"
           done
