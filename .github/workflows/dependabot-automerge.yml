@@ -202,4 +202,5 @@ jobs:
             --base main \
             --head "$BRANCH" \
             --title "chore: weekly dependency batch $(date +%Y-%m-%d)" \
-            --body "$(printf "Weekly Dependabot batch — all included PRs have CI passing and versions within HA constraints.\n\n## Included\n$PR_LIST\n\n## Excluded\n- PRs with failing CI, pending checks, or versions exceeding HA pins are not included.\n- Group/multi-package bumps need manual review.")"
+            --body "$(printf "Weekly Dependabot batch — all included PRs have CI passing and versions within HA constraints.\n\n## Included\n$PR_LIST\n\n## Excluded\n- PRs with failing CI, pending checks, or versions exceeding HA pins are not included.\n- Group/multi-package bumps need manual review.")" \
+            || { echo "##[error] gh pr create failed — branch '$BRANCH' was pushed but no PR was opened"; exit 1; }
