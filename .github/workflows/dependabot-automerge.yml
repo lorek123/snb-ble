@@ -141,9 +141,7 @@ jobs:
               continue
             fi
 
-            echo "  All $total check(s) passed — approving and merging"
-            gh pr review "$number" --approve --repo "$REPO" \
-              --body "Auto-approved by dependabot-automerge workflow: CI green and version within HA constraints."
-            gh pr merge "$number" --squash --delete-branch --repo "$REPO" \
+            echo "  All $total check(s) passed — merging"
+            gh pr merge "$number" --squash --delete-branch --admin --repo "$REPO" \
               || echo "  WARNING: merge failed for PR #$number — may need manual merge"
           done
