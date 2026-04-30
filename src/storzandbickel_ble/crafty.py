@@ -13,6 +13,7 @@ from storzandbickel_ble.protocol import (
     CRAFTY_CHAR_AKKU_STATUS,
     CRAFTY_CHAR_AUTO_OFF,
     CRAFTY_CHAR_BATTERY,
+    CRAFTY_CHAR_BLE_VERSION,
     CRAFTY_CHAR_BOOST_TEMP,
     CRAFTY_CHAR_CURRENT_TEMP,
     CRAFTY_CHAR_FIND_DEVICE,
@@ -110,9 +111,6 @@ class CraftyDevice(BaseDevice):
 
         self._set_connection_state(True)
 
-        # Read minimal initial state (fast connection)
-        # Service discovery happens automatically on first characteristic access
-        # Full state will be updated via notifications and can be read explicitly if needed
         await self._read_minimal_state()
 
         # Enable notifications (some may not be supported, so we catch errors)
@@ -217,11 +215,18 @@ class CraftyDevice(BaseDevice):
                 except Exception as e:
                     _LOGGER.warning("Failed to read battery level: %s", e)
 
-            # Read in parallel
+            async def read_ble_version() -> None:
+                try:
+                    data = await self._read_characteristic(CRAFTY_CHAR_BLE_VERSION)
+                    state.ble_version = decode_string(data)
+                except Exception as e:
+                    _LOGGER.debug("Failed to read BLE version: %s", e)
+
             await asyncio.gather(
                 read_temp(),
                 read_target(),
                 read_battery(),
+                read_ble_version(),
                 return_exceptions=True,
             )
 
@@ -380,40 +385,44 @@ class CraftyDevice(BaseDevice):
         The actual heater status is verified by reading the status register.
         """
         await self._write_characteristic(CRAFTY_CHAR_HEATER_ON, b"\x01")
-        # Read actual status to verify (device might not turn on if conditions aren't met)
-        await asyncio.sleep(0.5)  # Give device time to process
+        await asyncio.sleep(0.5)
         state = self._get_state()
         try:
             data = await self._read_characteristic(CRAFTY_CHAR_STATUS_REGISTER)
             if len(data) >= 10:
                 status = decode_uint16(data[8:10])
-                state.heater_on = bool(status & CRAFTY_STATUS_HEATER_ON)
-                state.status_register = status
-                if not state.heater_on:
-                    _LOGGER.info(
-                        "Heater command sent but device reports heater is off. "
-                        "Device may be on charger or not active."
-                    )
+            elif len(data) >= 2:
+                status = decode_uint16(data[:2])
+            else:
+                raise ValueError(f"Unexpected status register length: {len(data)}")
+            state.heater_on = bool(status & CRAFTY_STATUS_HEATER_ON)
+            state.status_register = status
+            if not state.heater_on:
+                _LOGGER.info(
+                    "Heater command sent but device reports heater is off; "
+                    "device may be on charger or not active."
+                )
         except Exception as e:
             _LOGGER.warning("Failed to read heater status after turning on: %s", e)
-            # Fallback to optimistic state
             state.heater_on = True
 
     async def turn_heater_off(self) -> None:
         """Turn heater off."""
         await self._write_characteristic(CRAFTY_CHAR_HEATER_OFF, b"\x01")
-        # Read actual status to verify
-        await asyncio.sleep(0.5)  # Give device time to process
+        await asyncio.sleep(0.5)
         state = self._get_state()
         try:
             data = await self._read_characteristic(CRAFTY_CHAR_STATUS_REGISTER)
             if len(data) >= 10:
                 status = decode_uint16(data[8:10])
-                state.heater_on = bool(status & CRAFTY_STATUS_HEATER_ON)
-                state.status_register = status
+            elif len(data) >= 2:
+                status = decode_uint16(data[:2])
+            else:
+                raise ValueError(f"Unexpected status register length: {len(data)}")
+            state.heater_on = bool(status & CRAFTY_STATUS_HEATER_ON)
+            state.status_register = status
         except Exception as e:
             _LOGGER.warning("Failed to read heater status after turning off: %s", e)
-            # Fallback to optimistic state
             state.heater_on = False
 
     async def set_led_brightness(self, brightness: int) -> None:
@@ -470,6 +479,30 @@ class CraftyDevice(BaseDevice):
         state = self._get_state()
         state.vibration_enabled = enabled
         state.project_status_register_2 = new_value
+
+    async def set_superboost(self, enabled: bool) -> None:
+        """Enable or disable superboost mode.
+
+        Writes the SUPERBOOST_ENABLED bit in the project status register.
+        Note: superboost only activates while the heater is on and device is active.
+        """
+        try:
+            data = await self._read_characteristic(CRAFTY_CHAR_PROJECT_STATUS)
+            current_value = decode_uint16(data)
+        except Exception:
+            current_value = 0
+
+        if enabled:
+            new_value = current_value | CRAFTY_PROJECT_STATUS_SUPERBOOST_ENABLED
+        else:
+            new_value = current_value & ~CRAFTY_PROJECT_STATUS_SUPERBOOST_ENABLED
+
+        await self._write_characteristic(
+            CRAFTY_CHAR_PROJECT_STATUS, encode_uint16(new_value)
+        )
+        state = self._get_state()
+        state.superboost_mode = enabled
+        state.project_status_register = new_value
 
     async def find_device(self) -> None:
         """Trigger find device (vibration/LED alert)."""
