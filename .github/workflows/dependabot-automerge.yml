@@ -1,4 +1,4 @@
-name: Auto-merge Dependabot PRs
+name: Batch Dependabot PRs
 
 on:
   schedule:
@@ -13,10 +13,22 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  automerge:
-    name: Merge qualifying Dependabot PRs
+  batch:
+    name: Create batched Dependabot PR
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14.2"
+
       - name: Fetch HA package constraints
         run: |
           curl -fsSL \
@@ -25,18 +37,19 @@ jobs:
           echo "=== HA constraints for our runtime deps ==="
           grep -iE "^(bleak|pydantic)" /tmp/ha_constraints.txt || echo "(none found)"
 
-      - name: Merge qualifying PRs
+      - name: Collect and batch qualifying PRs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         run: |
-          set -euo pipefail
+          set -uo pipefail
 
-          # Returns 0 (allow merge) if bumping pkg to new_ver does not exceed HA's pinned version.
-          # Packages not mentioned in HA constraints (dev tools, etc.) are always allowed.
           version_ok() {
             local pkg="$1" new_ver="$2"
-            # Normalise separator so bleak-retry-connector matches bleak_retry_connector
             local pkg_pattern
             pkg_pattern=$(echo "$pkg" | sed 's/[-_]/[-_]/g')
             local ha_line
@@ -56,7 +69,6 @@ jobs:
           new = Version(new_ver)
           spec_str = re.sub(r'^[\w\-_.]+', '', ha_line).strip()
 
-          # Walk each specifier clause and enforce upper bounds
           upper_ok = True
           for part in spec_str.split(','):
               part = part.strip()
@@ -69,25 +81,28 @@ jobs:
               elif part.startswith('<'):
                   if new >= Version(part[1:]):
                       upper_ok = False
-              # >= and > are lower bounds only — no upper limit imposed
 
           sys.exit(0 if upper_ok else 1)
           PYEOF
           }
 
+          # --- Collect qualifying PR numbers and titles into a file ---
+          QUALIFIED=$(mktemp)
+
           prs=$(gh pr list \
             --author "app/dependabot" \
             --state open \
-            --json number,title,headRefOid,mergeStateStatus,labels \
+            --json number,title,headRefName,headRefOid,mergeStateStatus,labels \
             --repo "$REPO")
 
           echo "Open Dependabot PRs: $(echo "$prs" | jq 'length')"
 
           echo "$prs" | jq -c '.[]' | while read -r pr; do
-            number=$(echo "$pr"      | jq -r '.number')
-            title=$(echo "$pr"       | jq -r '.title')
-            sha=$(echo "$pr"         | jq -r '.headRefOid')
-            merge_state=$(echo "$pr" | jq -r '.mergeStateStatus')
+            number=$(echo "$pr"       | jq -r '.number')
+            title=$(echo "$pr"        | jq -r '.title')
+            sha=$(echo "$pr"          | jq -r '.headRefOid')
+            head_ref=$(echo "$pr"     | jq -r '.headRefName')
+            merge_state=$(echo "$pr"  | jq -r '.mergeStateStatus')
 
             echo ""
             echo "=== PR #$number: $title"
@@ -97,29 +112,23 @@ jobs:
               continue
             fi
 
-            is_security=$(echo "$pr" | jq '[.labels[].name] | any(. == "security")')
-
-            # All PRs (security or not) must respect HA's version ceiling.
-            # Only handle single-package bumps: "Bump <pkg> from <old> to <new>"
             if echo "$title" | grep -qiE "^Bump [^ ]+ from [^ ]+ to [^ ]+$"; then
               pkg=$(echo "$title"     | awk '{print $2}')
               new_ver=$(echo "$title" | awk '{print $6}')
-              label=""
-              [ "$is_security" = "true" ] && label=" (security)"
+              is_security=$(echo "$pr" | jq '[.labels[].name] | any(. == "security")')
+              label=""; [ "$is_security" = "true" ] && label=" (security)"
               echo "  Package bump$label: $pkg → $new_ver"
               if ! version_ok "$pkg" "$new_ver"; then
                 echo "  SKIP: $new_ver exceeds HA's pinned version"
                 continue
               fi
             else
-              # Group / multi-package bumps need manual review regardless of security label.
               echo "  SKIP: group bump — needs manual review"
               continue
             fi
 
-            # Check CI status for the PR head commit
             check_runs=$(gh api "repos/$REPO/commits/$sha/check-runs" --paginate \
-              --jq '[.check_runs[] | select(.name != "Merge qualifying Dependabot PRs")]')
+              --jq '[.check_runs[] | select(.name != "Create batched Dependabot PR")]')
 
             total=$(echo "$check_runs"   | jq 'length')
             pending=$(echo "$check_runs" | jq '[.[] | select(.status != "completed")] | length')
@@ -128,19 +137,70 @@ jobs:
               (.conclusion | IN("success","skipped","neutral") | not)
             )] | length')
 
-            if [ "$total" -eq 0 ]; then
-              echo "  SKIP: no CI checks found"
-              continue
-            fi
-            if [ "$pending" -gt 0 ]; then
-              echo "  SKIP: $pending check(s) still running"
-              continue
-            fi
-            if [ "$failed" -gt 0 ]; then
-              echo "  SKIP: $failed check(s) failed"
-              continue
-            fi
+            if [ "$total" -eq 0 ]; then echo "  SKIP: no CI checks"; continue; fi
+            if [ "$pending" -gt 0 ]; then echo "  SKIP: $pending check(s) pending"; continue; fi
+            if [ "$failed"  -gt 0 ]; then echo "  SKIP: $failed check(s) failed";  continue; fi
 
-            echo "  All $total check(s) passed — merging"
-            gh pr merge "$number" --squash --delete-branch --repo "$REPO"
+            echo "  Qualified — adding to batch"
+            echo "$number|$title|$head_ref" >> "$QUALIFIED"
           done
+
+          if [ ! -s "$QUALIFIED" ]; then
+            echo ""
+            echo "No qualifying PRs found — nothing to do"
+            exit 0
+          fi
+
+          # --- Check if a batch PR for today already exists ---
+          BRANCH="dependabot-batch-$(date +%Y-%m-%d)"
+          if gh pr list --head "$BRANCH" --state open --repo "$REPO" | grep -q .; then
+            echo "Batch PR for today ($BRANCH) already exists — skipping"
+            exit 0
+          fi
+
+          # --- Create batch branch and merge each qualifying PR ---
+          git checkout -b "$BRANCH" origin/main
+
+          PR_LIST=""
+          while IFS='|' read -r number title head_ref; do
+            echo ""
+            echo "Merging PR #$number ($title) from $head_ref"
+            git fetch origin "$head_ref"
+
+            if git merge --no-ff "origin/$head_ref" --no-commit 2>/dev/null; then
+              git commit -m "chore: merge dependabot PR #$number — $title" || true
+              PR_LIST="$PR_LIST\n- #$number: $title"
+            else
+              # If only uv.lock conflicts, drop it and re-lock later
+              conflicted=$(git diff --name-only --diff-filter=U 2>/dev/null || true)
+              if [ "$conflicted" = "uv.lock" ] || [ -z "$conflicted" ]; then
+                git checkout HEAD -- uv.lock 2>/dev/null || git rm -f uv.lock 2>/dev/null || true
+                git commit -m "chore: merge dependabot PR #$number — $title (uv.lock deferred)" || true
+                PR_LIST="$PR_LIST\n- #$number: $title"
+              else
+                echo "  Skipping #$number — conflicts in: $conflicted"
+                git merge --abort 2>/dev/null || true
+              fi
+            fi
+          done < "$QUALIFIED"
+
+          if [ -z "$PR_LIST" ]; then
+            echo "All PRs had conflicts — nothing to push"
+            exit 0
+          fi
+
+          # --- Regenerate uv.lock cleanly from the merged pyproject.toml ---
+          uv lock
+          git add uv.lock
+          git diff --staged --quiet || git commit -m "chore: regenerate uv.lock after batch dependency updates"
+
+          # --- Push and open the PR ---
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --repo "$REPO" \
+            --base main \
+            --head "$BRANCH" \
+            --title "chore: weekly dependency batch $(date +%Y-%m-%d)" \
+            --body "$(printf "Weekly Dependabot batch — all included PRs have CI passing and versions within HA constraints.\n\n## Included\n$PR_LIST\n\n## Excluded\n- PRs with failing CI, pending checks, or versions exceeding HA pins are not included.\n- Group/multi-package bumps need manual review.")" \
+            || { echo "##[error] gh pr create failed — branch '$BRANCH' was pushed but no PR was opened"; exit 1; }
