@@ -1,6 +1,7 @@
 """Base device class for Storz & Bickel BLE devices."""
 
 import asyncio
+import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
@@ -16,6 +17,8 @@ from storzandbickel_ble.models import DeviceState, DeviceType
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class BaseDevice(ABC):
