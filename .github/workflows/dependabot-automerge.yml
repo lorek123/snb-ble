@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  workflows: write
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -63,23 +64,26 @@ jobs:
             echo "  HA constraint: $ha_line"
             python3 - "$ha_line" "$new_ver" <<'PYEOF'
           import sys, re
-          from packaging.version import Version
 
           ha_line, new_ver = sys.argv[1], sys.argv[2]
-          new = Version(new_ver)
+
+          def parse_ver(v):
+              return tuple(int(x) for x in re.split(r'[^0-9]+', v.split('+')[0]) if x)
+
+          new = parse_ver(new_ver)
           spec_str = re.sub(r'^[\w\-_.]+', '', ha_line).strip()
 
           upper_ok = True
           for part in spec_str.split(','):
               part = part.strip()
               if part.startswith('=='):
-                  if new > Version(part[2:]):
+                  if new > parse_ver(part[2:]):
                       upper_ok = False
               elif part.startswith('<='):
-                  if new > Version(part[2:]):
+                  if new > parse_ver(part[2:]):
                       upper_ok = False
               elif part.startswith('<'):
-                  if new >= Version(part[1:]):
+                  if new >= parse_ver(part[1:]):
                       upper_ok = False
 
           sys.exit(0 if upper_ok else 1)
