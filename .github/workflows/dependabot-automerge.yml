@@ -17,7 +17,7 @@ jobs:
     name: Create batched Dependabot PR
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -112,9 +112,10 @@ jobs:
               continue
             fi
 
-            if echo "$title" | grep -qiE "^Bump [^ ]+ from [^ ]+ to [^ ]+$"; then
-              pkg=$(echo "$title"     | awk '{print $2}')
-              new_ver=$(echo "$title" | awk '{print $6}')
+            norm_title=$(echo "$title" | sed -E 's/^build\(deps\): //i')
+            if echo "$norm_title" | grep -qiE "^bump [^ ]+ from [^ ]+ to [^ ]+"; then
+              pkg=$(echo "$norm_title"     | awk '{print $2}')
+              new_ver=$(echo "$norm_title" | awk '{print $6}')
               is_security=$(echo "$pr" | jq '[.labels[].name] | any(. == "security")')
               label=""; [ "$is_security" = "true" ] && label=" (security)"
               echo "  Package bump$label: $pkg → $new_ver"
