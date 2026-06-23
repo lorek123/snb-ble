@@ -8,7 +8,6 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  workflows: write
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -113,6 +112,11 @@ jobs:
 
             if [ "$merge_state" = "DIRTY" ]; then
               echo "  SKIP: merge conflict"
+              continue
+            fi
+
+            if echo "$head_ref" | grep -qE "^dependabot/github_actions/"; then
+              echo "  SKIP: GitHub Actions bump — modifies workflow files, merge manually"
               continue
             fi
 
