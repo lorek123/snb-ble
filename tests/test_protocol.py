@@ -80,3 +80,10 @@ def test_decode_string() -> None:
     data = bytes([0x56, 0x31, 0x2E, 0x30, 0x2E, 0x30])
     result = decode_string(data)
     assert result == "V1.0.0"
+
+
+def test_decode_string_binary_payload() -> None:
+    """Binary payloads with invalid UTF-8 bytes (e.g. 0xff) must not raise."""
+    data = bytes([0x56, 0x31, 0xFF, 0x30, 0x2E, 0x30])
+    result = decode_string(data)
+    assert "V1" in result

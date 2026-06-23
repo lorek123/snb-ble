@@ -236,8 +236,8 @@ def decode_string(data: bytes | bytearray | Sequence[int]) -> str:
         Decoded string without null terminators
     """
     if isinstance(data, (bytes, bytearray)):
-        return data.decode("utf-8").rstrip("\0")
-    return bytes(data).decode("utf-8").rstrip("\0")
+        return data.decode("utf-8", errors="ignore").rstrip("\0")
+    return bytes(data).decode("utf-8", errors="ignore").rstrip("\0")
 
 
 def clamp_temperature(temp: float, min_temp: float, max_temp: float) -> float:

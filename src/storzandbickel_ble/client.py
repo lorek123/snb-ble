@@ -37,6 +37,26 @@ class StorzBickelClient:
         self._scanner: BleakScanner | None = None
 
     @staticmethod
+    def _is_model_specific_name(name: str) -> bool:
+        """Return True when the name contains a model-specific keyword.
+
+        Generic names like "STORZ&BICKEL" match S&B but don't identify the model,
+        so device type detection from the advertisement is unreliable for them.
+        """
+        name_upper = name.upper()
+        return any(
+            keyword in name_upper
+            for keyword in (
+                DEVICE_NAME_VOLCANO,
+                DEVICE_NAME_VEAZY,
+                DEVICE_NAME_VEAZY_SHORT,
+                DEVICE_NAME_VENTY,
+                DEVICE_NAME_VENTY_SHORT,
+                DEVICE_NAME_CRAFTY,
+            )
+        )
+
+    @staticmethod
     def _detect_device_type(name: str) -> DeviceType | None:
         """Detect device type from name.
 
@@ -294,9 +314,13 @@ class StorzBickelClient:
                 client = BleakClient(device_info.address, timeout=timeout)
                 await asyncio.wait_for(client.connect(), timeout=timeout)
 
-            # If device name is unknown, read it from the device to verify it's an S&B device
+            # Re-detect the device type from the GAP Device Name characteristic when either
+            # the name is unknown (direct connect without scan) or it is a generic S&B name
+            # that doesn't identify the model (common through ESPHome BLE proxies, which
+            # often strip the model-specific part of the advertisement name and cause
+            # _detect_device_type to fall back to CRAFTY for any S&B device).
             device_name = device_info.name
-            if device_name.startswith("Unknown"):
+            if device_name.startswith("Unknown") or not self._is_model_specific_name(device_name):
                 try:
                     # Read device name from GAP service (standard BLE characteristic)
                     # UUID 0x2A00 is the Device Name characteristic in GAP service (0x1800)
