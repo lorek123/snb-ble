@@ -488,9 +488,17 @@ class VentyDevice(BaseDevice):
                 settings = data_array[14] if len(data_array) > 14 else 0
 
                 current_temp = current_temp_raw / 10.0
-                state.current_temperature = current_temp if TEMP_MIN_VENTY <= current_temp <= TEMP_MAX_VENTY else None
+                state.current_temperature = (
+                    current_temp
+                    if TEMP_MIN_VENTY <= current_temp <= TEMP_MAX_VENTY
+                    else None
+                )
                 target_temp = target_temp_raw / 10.0
-                state.target_temperature = target_temp if TEMP_MIN_VENTY <= target_temp <= TEMP_MAX_VENTY else None
+                state.target_temperature = (
+                    target_temp
+                    if TEMP_MIN_VENTY <= target_temp <= TEMP_MAX_VENTY
+                    else None
+                )
                 state.boost_offset = boost_offset
                 state.superboost_offset = superboost_offset
                 state.battery_level = battery

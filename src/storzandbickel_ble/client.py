@@ -320,7 +320,9 @@ class StorzBickelClient:
             # often strip the model-specific part of the advertisement name and cause
             # _detect_device_type to fall back to CRAFTY for any S&B device).
             device_name = device_info.name
-            if device_name.startswith("Unknown") or not self._is_model_specific_name(device_name):
+            if device_name.startswith("Unknown") or not self._is_model_specific_name(
+                device_name
+            ):
                 try:
                     # Read device name from GAP service (standard BLE characteristic)
                     # UUID 0x2A00 is the Device Name characteristic in GAP service (0x1800)
