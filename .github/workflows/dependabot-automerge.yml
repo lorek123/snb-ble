@@ -17,7 +17,7 @@ jobs:
     name: Create batched Dependabot PR
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -63,23 +63,26 @@ jobs:
             echo "  HA constraint: $ha_line"
             python3 - "$ha_line" "$new_ver" <<'PYEOF'
           import sys, re
-          from packaging.version import Version
 
           ha_line, new_ver = sys.argv[1], sys.argv[2]
-          new = Version(new_ver)
+
+          def parse_ver(v):
+              return tuple(int(x) for x in re.split(r'[^0-9]+', v.split('+')[0]) if x)
+
+          new = parse_ver(new_ver)
           spec_str = re.sub(r'^[\w\-_.]+', '', ha_line).strip()
 
           upper_ok = True
           for part in spec_str.split(','):
               part = part.strip()
               if part.startswith('=='):
-                  if new > Version(part[2:]):
+                  if new > parse_ver(part[2:]):
                       upper_ok = False
               elif part.startswith('<='):
-                  if new > Version(part[2:]):
+                  if new > parse_ver(part[2:]):
                       upper_ok = False
               elif part.startswith('<'):
-                  if new >= Version(part[1:]):
+                  if new >= parse_ver(part[1:]):
                       upper_ok = False
 
           sys.exit(0 if upper_ok else 1)
@@ -112,9 +115,15 @@ jobs:
               continue
             fi
 
-            if echo "$title" | grep -qiE "^Bump [^ ]+ from [^ ]+ to [^ ]+$"; then
-              pkg=$(echo "$title"     | awk '{print $2}')
-              new_ver=$(echo "$title" | awk '{print $6}')
+            if echo "$head_ref" | grep -qE "^dependabot/github_actions/"; then
+              echo "  SKIP: GitHub Actions bump — modifies workflow files, merge manually"
+              continue
+            fi
+
+            norm_title=$(echo "$title" | sed -E 's/^build\(deps\): //i')
+            if echo "$norm_title" | grep -qiE "^bump [^ ]+ from [^ ]+ to [^ ]+"; then
+              pkg=$(echo "$norm_title"     | awk '{print $2}')
+              new_ver=$(echo "$norm_title" | awk '{print $6}')
               is_security=$(echo "$pr" | jq '[.labels[].name] | any(. == "security")')
               label=""; [ "$is_security" = "true" ] && label=" (security)"
               echo "  Package bump$label: $pkg → $new_ver"

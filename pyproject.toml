@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.14"
 license = {text = "MIT"}
 authors = [
-    {name = "Storz & Bickel BLE Contributors"}
+    {name = "lorek123"}
 ]
 keywords = ["ble", "bluetooth", "storz", "bickel", "volcano", "venty", "crafty", "home-assistant"]
 classifiers = [
@@ -44,10 +44,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/storzandbickel-ble"
-Documentation = "https://storzandbickel-ble.readthedocs.io"
-Repository = "https://github.com/yourusername/storzandbickel-ble"
-Issues = "https://github.com/yourusername/storzandbickel-ble/issues"
+Homepage = "https://github.com/lorek123/snb-ble"
+Repository = "https://github.com/lorek123/snb-ble"
+Issues = "https://github.com/lorek123/snb-ble/issues"
 
 [tool.hatchling.build]
 include = [

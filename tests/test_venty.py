@@ -97,6 +97,46 @@ def test_venty_parse_settings_notification() -> None:
     assert device.state.boost_timeout_disabled is True
 
 
+def test_venty_parse_status_sentinel_temperature() -> None:
+    """Out-of-range sentinel values (device off/charging) must map to None."""
+    device = VentyDevice("AA:BB:CC:DD:EE:FF")
+    # 0x7530 = 30000 → 3000.0°C, the sentinel seen when device is off/charging
+    raw_lo, raw_hi = 0x30, 0x75
+    data = bytearray(15)
+    data[0] = 0x01  # VENTY_CMD_STATUS_CONTROL
+    data[2], data[3] = raw_lo, raw_hi  # current_temp = 30000 raw
+    data[4], data[5] = raw_lo, raw_hi  # target_temp = 30000 raw
+
+    device._handle_main_notification(bytes(data))
+
+    assert device.state.current_temperature is None
+    assert device.state.target_temperature is None
+
+
+def test_venty_parse_status_valid_temperature() -> None:
+    """Valid temperatures in range must be stored as-is."""
+    device = VentyDevice("AA:BB:CC:DD:EE:FF")
+    # 185°C → raw = 1850 = 0x073A → lo=0x3A, hi=0x07
+    data = bytearray(15)
+    data[0] = 0x01  # VENTY_CMD_STATUS_CONTROL
+    data[2], data[3] = 0x3A, 0x07  # current_temp = 185°C
+    data[4], data[5] = 0x3A, 0x07  # target_temp = 185°C
+
+    device._handle_main_notification(bytes(data))
+
+    assert device.state.current_temperature == 185.0
+    assert device.state.target_temperature == 185.0
+
+
+def test_venty_parse_firmware_binary_payload() -> None:
+    """Binary notification payloads containing 0xff must not raise."""
+    device = VentyDevice("AA:BB:CC:DD:EE:FF")
+    # cmd=VENTY_CMD_FIRMWARE_VERSION with a binary byte at position 17
+    data = bytes([0x02]) + b"V1.0" + bytes([0xFF] * 13)
+
+    device._handle_main_notification(data)  # must not raise
+
+
 @pytest.mark.asyncio
 async def test_venty_run_analysis(mock_bleak_client) -> None:
     """Test local analysis summary generation."""

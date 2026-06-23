@@ -87,3 +87,46 @@ def test_detect_device_type_veazy_and_venty_short_names() -> None:
     """Test short-name device type detection for qvap devices."""
     assert StorzBickelClient._detect_device_type("S&B VZ 123456") == DeviceType.VEAZY
     assert StorzBickelClient._detect_device_type("S&B VY 654321") == DeviceType.VENTY
+
+
+def test_is_model_specific_name() -> None:
+    """Generic S&B names must not be considered model-specific."""
+    assert StorzBickelClient._is_model_specific_name("VENTY") is True
+    assert StorzBickelClient._is_model_specific_name("S&B VY 123456") is True
+    assert StorzBickelClient._is_model_specific_name("CRAFTY+") is True
+    assert StorzBickelClient._is_model_specific_name("S&B VOLCANO") is True
+    assert StorzBickelClient._is_model_specific_name("STORZ&BICKEL") is False
+    assert StorzBickelClient._is_model_specific_name("S&B DEVICE") is False
+
+
+@pytest.mark.asyncio
+async def test_connect_device_redetects_generic_sb_name(mock_bleak_client) -> None:
+    """connect_device re-reads the GAP name when the advertisement is a generic S&B name.
+
+    ESPHome BLE proxies often advertise S&B devices as "STORZ&BICKEL" without the
+    model keyword, causing _detect_device_type to default to CRAFTY. The connect path
+    must read the GAP Device Name characteristic and correct the type before creating
+    the device instance.
+    """
+    from storzandbickel_ble.models import DeviceInfo
+    from storzandbickel_ble.venty import VentyDevice
+
+    # Simulate: advertisement shows generic name, config stored CRAFTY
+    device_info = DeviceInfo(
+        name="STORZ&BICKEL",
+        address="AA:BB:CC:DD:EE:FF",
+        device_type=DeviceType.CRAFTY,
+        ble_device=None,
+    )
+    # GAP characteristic returns the real model name
+    mock_bleak_client.read_gatt_char = AsyncMock(return_value=b"VENTY\x00")
+    mock_bleak_client.is_connected = True
+
+    client = StorzBickelClient()
+    with patch("storzandbickel_ble.client.BleakClient", return_value=mock_bleak_client):
+        with patch.object(mock_bleak_client, "connect", new_callable=AsyncMock):
+            # Patch VentyDevice.connect so we don't actually do BLE I/O
+            with patch.object(VentyDevice, "connect", new_callable=AsyncMock):
+                device = await client.connect_device(device_info)
+
+    assert isinstance(device, VentyDevice)
