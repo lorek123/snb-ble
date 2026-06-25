@@ -100,7 +100,7 @@ class CraftyState(DeviceState):
     fahrenheit_mode: bool = False
     led_brightness: int = Field(50, ge=0, le=100)
     auto_off_time: int = Field(0, ge=0)  # seconds
-    charging: bool = False
+    charging: bool | None = None
     usage_hours: int = Field(0, ge=0)
     usage_minutes: int = Field(0, ge=0, le=59)
     status_register: int = 0

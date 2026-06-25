@@ -342,14 +342,6 @@ class CraftyDevice(BaseDevice):
             except Exception as e:
                 _LOGGER.warning("Failed to read usage minutes: %s", e)
 
-            # Read Akku status (charging detection)
-            try:
-                data = await self._read_characteristic(CRAFTY_CHAR_AKKU_STATUS)
-                # Parse charging status from data (implementation may vary)
-                state.charging = len(data) > 0 and data[0] > 0
-            except Exception as e:
-                _LOGGER.warning("Failed to read Akku status: %s", e)
-
         except Exception as e:
             _LOGGER.error("Error updating state: %s", e, exc_info=True)
             raise InvalidDataError(f"Failed to update state: {e}") from e
@@ -616,11 +608,10 @@ class CraftyDevice(BaseDevice):
             )
 
     def _handle_akku_status_notification(self, data: bytes) -> None:
-        """Handle Akku status notification."""
-        state = self._get_state()
+        """Handle Akku status notification (akkuStatusReg2 — error diagnostics only)."""
         try:
-            # Parse charging status from data
-            data_array = bytearray(data)
-            state.charging = len(data_array) > 0 and data_array[0] > 0
+            val = int.from_bytes(data[:2], "little") if len(data) >= 2 else 0
+            if val & 0x8000:
+                _LOGGER.warning("Crafty charger/cable error reported (akkuStatusReg2 bit 15)")
         except Exception as e:
             _LOGGER.warning("Error handling Akku status notification: %s", e)
