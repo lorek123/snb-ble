@@ -376,7 +376,7 @@ class CraftyDevice(BaseDevice):
 
         The actual heater status is verified by reading the status register.
         """
-        await self._write_characteristic(CRAFTY_CHAR_HEATER_ON, b"\x01")
+        await self._write_characteristic(CRAFTY_CHAR_HEATER_ON, b"\x00\x00")
         await asyncio.sleep(0.5)
         state = self._get_state()
         try:
@@ -400,7 +400,7 @@ class CraftyDevice(BaseDevice):
 
     async def turn_heater_off(self) -> None:
         """Turn heater off."""
-        await self._write_characteristic(CRAFTY_CHAR_HEATER_OFF, b"\x01")
+        await self._write_characteristic(CRAFTY_CHAR_HEATER_OFF, b"\x00\x00")
         await asyncio.sleep(0.5)
         state = self._get_state()
         try:
