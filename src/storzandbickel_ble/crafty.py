@@ -16,7 +16,6 @@ from storzandbickel_ble.protocol import (
     CRAFTY_CHAR_BLE_VERSION,
     CRAFTY_CHAR_BOOST_TEMP,
     CRAFTY_CHAR_CURRENT_TEMP,
-    CRAFTY_CHAR_FIND_DEVICE,
     CRAFTY_CHAR_HEATER_OFF,
     CRAFTY_CHAR_HEATER_ON,
     CRAFTY_CHAR_LED_BRIGHTNESS,
@@ -26,6 +25,7 @@ from storzandbickel_ble.protocol import (
     CRAFTY_CHAR_TARGET_TEMP,
     CRAFTY_CHAR_USAGE_HOURS,
     CRAFTY_CHAR_USAGE_MINUTES,
+    CRAFTY_PROJECT_STATUS2_FIND_DEVICE,
     CRAFTY_PROJECT_STATUS2_VIBRATION_DISABLED,
     CRAFTY_PROJECT_STATUS_ACTIVE,
     CRAFTY_PROJECT_STATUS_BOOST_ENABLED,
@@ -497,8 +497,17 @@ class CraftyDevice(BaseDevice):
         state.project_status_register = new_value
 
     async def find_device(self) -> None:
-        """Trigger find device (vibration/LED alert)."""
-        await self._write_characteristic(CRAFTY_CHAR_FIND_DEVICE, b"\x01")
+        """Trigger find device (vibration/LED alert, auto-clears after 30 s).
+
+        Sets MASK_PRJSTAT2_SIGNALGEBER_FIND_DEVICE_ENABLE (bit 3) in
+        prjStatusReg2, matching the official S&B app behaviour.
+        """
+        state = self._get_state()
+        new_val = state.project_status_register_2 | CRAFTY_PROJECT_STATUS2_FIND_DEVICE
+        await self._write_characteristic(
+            CRAFTY_CHAR_PROJECT_STATUS_2, encode_uint16(new_val)
+        )
+        state.project_status_register_2 = new_val
 
     async def run_analysis(self) -> dict[str, object]:
         """Run local Crafty diagnostics summary (no cloud upload)."""
