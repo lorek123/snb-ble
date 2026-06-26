@@ -612,6 +612,8 @@ class CraftyDevice(BaseDevice):
         try:
             val = int.from_bytes(data[:2], "little") if len(data) >= 2 else 0
             if val & 0x8000:
-                _LOGGER.warning("Crafty charger/cable error reported (akkuStatusReg2 bit 15)")
+                _LOGGER.warning(
+                    "Crafty charger/cable error reported (akkuStatusReg2 bit 15)"
+                )
         except Exception as e:
             _LOGGER.warning("Error handling Akku status notification: %s", e)
