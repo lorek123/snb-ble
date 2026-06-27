@@ -292,6 +292,10 @@ class CraftyDevice(BaseDevice):
                 state.device_active = bool(
                     state.project_status_register & CRAFTY_PROJECT_STATUS_ACTIVE,
                 )
+                # heater_on mirrors device_active — the project status ACTIVE bit
+                # (char 0x93) is the authoritative heater state source. The status
+                # register (char 0x52) may return serial/firmware data, not live status.
+                state.heater_on = state.device_active
                 state.boost_mode = bool(
                     state.project_status_register & CRAFTY_PROJECT_STATUS_BOOST_ENABLED,
                 )
@@ -565,12 +569,9 @@ class CraftyDevice(BaseDevice):
                 # Short format: 2-byte status register only (some firmware versions)
                 state.status_register = decode_uint16(data_array[:2])
             if len(data_array) >= 2:
-                state.heater_on = bool(
-                    state.status_register & CRAFTY_STATUS_HEATER_ON,
-                )
-                state.boost_mode = bool(
-                    state.status_register & CRAFTY_STATUS_BOOST_MODE,
-                )
+                # Do NOT derive heater_on from this register — char 0x52 returns
+                # serial/firmware data, not live status. heater_on is set from the
+                # project status register (char 0x93) ACTIVE bit instead.
                 state.vibration_on_ready = bool(
                     state.status_register & CRAFTY_STATUS_VIBRATION_READY,
                 )
@@ -588,6 +589,7 @@ class CraftyDevice(BaseDevice):
             state.device_active = bool(
                 state.project_status_register & CRAFTY_PROJECT_STATUS_ACTIVE,
             )
+            state.heater_on = state.device_active
             state.boost_mode = bool(
                 state.project_status_register & CRAFTY_PROJECT_STATUS_BOOST_ENABLED,
             )
