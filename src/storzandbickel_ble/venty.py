@@ -488,10 +488,11 @@ class VentyDevice(BaseDevice):
                 settings = data_array[14] if len(data_array) > 14 else 0
 
                 current_temp = current_temp_raw / 10.0
+                # Use a wide physical range so the sensor shows while the device
+                # is cold or cooling — TEMP_MIN_VENTY (40°C) is the minimum
+                # *settable* temperature, not the minimum measurable temperature.
                 state.current_temperature = (
-                    current_temp
-                    if TEMP_MIN_VENTY <= current_temp <= TEMP_MAX_VENTY
-                    else None
+                    current_temp if 0 < current_temp <= 250.0 else None
                 )
                 target_temp = target_temp_raw / 10.0
                 state.target_temperature = (
