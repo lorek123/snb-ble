@@ -13,6 +13,8 @@ from storzandbickel_ble.protocol import (
     CRAFTY_CHAR_AKKU_STATUS,
     CRAFTY_CHAR_AUTO_OFF,
     CRAFTY_CHAR_BATTERY,
+    CRAFTY_CHAR_SICHERHEITSCODE,
+    CRAFTY_SICHERHEITSCODE,
     CRAFTY_CHAR_BLE_VERSION,
     CRAFTY_CHAR_BOOST_TEMP,
     CRAFTY_CHAR_CURRENT_TEMP,
@@ -451,16 +453,18 @@ class CraftyDevice(BaseDevice):
         state.led_brightness = brightness
 
     async def set_auto_off_time(self, seconds: int) -> None:
-        """Set auto-off time.
+        """Set auto-off time in seconds (0 = disabled).
 
-        Args:
-            seconds: Auto-off time in seconds
+        The official S&B app requires the Sicherheitscode (815) to be written
+        to char 0x1B3 immediately before writing the auto-off value to char 0x61.
         """
         if seconds < 0:
             msg = f"Auto-off time must be >= 0, got {seconds}"
             raise ValueError(msg)
-        data = encode_uint16(seconds)
-        await self._write_characteristic(CRAFTY_CHAR_AUTO_OFF, data)
+        await self._write_characteristic(
+            CRAFTY_CHAR_SICHERHEITSCODE, encode_uint16(CRAFTY_SICHERHEITSCODE)
+        )
+        await self._write_characteristic(CRAFTY_CHAR_AUTO_OFF, encode_uint16(seconds))
         state = self._get_state()
         state.auto_off_time = seconds
 
