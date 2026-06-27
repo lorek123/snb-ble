@@ -476,6 +476,27 @@ class CraftyDevice(BaseDevice):
         state.vibration_enabled = enabled
         state.project_status_register_2 = new_value
 
+    async def toggle_boost_mode(self) -> None:
+        """Toggle boost mode on/off in the project status register."""
+        try:
+            data = await self._read_characteristic(CRAFTY_CHAR_PROJECT_STATUS)
+            current_value = decode_uint16(data)
+        except Exception:
+            current_value = self._get_state().project_status_register
+
+        enabled = not bool(current_value & CRAFTY_PROJECT_STATUS_BOOST_ENABLED)
+        if enabled:
+            new_value = current_value | CRAFTY_PROJECT_STATUS_BOOST_ENABLED
+        else:
+            new_value = current_value & ~CRAFTY_PROJECT_STATUS_BOOST_ENABLED
+
+        await self._write_characteristic(
+            CRAFTY_CHAR_PROJECT_STATUS, encode_uint16(new_value)
+        )
+        state = self._get_state()
+        state.boost_mode = enabled
+        state.project_status_register = new_value
+
     async def set_superboost(self, enabled: bool) -> None:
         """Enable or disable superboost mode.
 
