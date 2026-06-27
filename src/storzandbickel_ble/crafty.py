@@ -215,6 +215,13 @@ class CraftyDevice(BaseDevice):
                 except Exception as e:
                     _LOGGER.warning("Failed to read battery level: %s", e)
 
+            async def read_boost_temp() -> None:
+                try:
+                    data = await self._read_characteristic(CRAFTY_CHAR_BOOST_TEMP)
+                    state.boost_temperature = decode_temperature(data)
+                except Exception as e:
+                    _LOGGER.warning("Failed to read boost temperature: %s", e)
+
             async def read_ble_version() -> None:
                 try:
                     data = await self._read_characteristic(CRAFTY_CHAR_BLE_VERSION)
@@ -226,6 +233,7 @@ class CraftyDevice(BaseDevice):
                 read_temp(),
                 read_target(),
                 read_battery(),
+                read_boost_temp(),
                 read_ble_version(),
                 return_exceptions=True,
             )
@@ -317,6 +325,13 @@ class CraftyDevice(BaseDevice):
                 )
             except Exception as e:
                 _LOGGER.warning("Failed to read project status register 2: %s", e)
+
+            # Read boost temperature
+            try:
+                data = await self._read_characteristic(CRAFTY_CHAR_BOOST_TEMP)
+                state.boost_temperature = decode_temperature(data)
+            except Exception as e:
+                _LOGGER.warning("Failed to read boost temperature: %s", e)
 
             # Read LED brightness
             try:
