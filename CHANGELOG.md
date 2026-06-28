@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Added `CraftyDevice.set_charge_led()` and `set_permanent_bluetooth()`, toggling the project-status-register-2 charge-LED and auto-BLE-shutdown bits.
+- Added `CraftyState.charge_led_enabled`, `permanent_bluetooth`, and `setpoint_reached`, decoded from project status register 2.
 - Added a frontend capability audit document at `docs/app-frontend-capabilities.md` for Home Assistant integration planning.
 - Captured and compared STORZ & BICKEL web app device/capability coverage against current library support, including identified feature gaps.
 - Added HA library readiness checklist at `docs/ha-library-quality-checklist.md`.
@@ -17,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added tests for diagnostics sanitization, availability transitions, and command timeout behavior.
 
 ### Changed
+- Decoded and wrote Crafty project status register 2 through shared helpers (`_apply_project_status2`, `_write_project_status2_bit`) so polling, notifications, and setters can't drift.
 - Serialized per-device BLE I/O operations in `BaseDevice` to reduce read/write overlap races.
 - Updated docs with supported-function matrix, data update model, concurrency contract, known limitations, and troubleshooting guidance.
 - Increased coverage quality gate from `45` to `55`.

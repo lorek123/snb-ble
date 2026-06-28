@@ -97,6 +97,9 @@ class CraftyState(DeviceState):
     device_active: bool = False
     vibration_enabled: bool = True
     vibration_on_ready: bool = False
+    setpoint_reached: bool = False
+    charge_led_enabled: bool = True
+    permanent_bluetooth: bool = False
     fahrenheit_mode: bool = False
     led_brightness: int = Field(50, ge=0, le=100)
     auto_off_time: int = Field(0, ge=0)  # seconds

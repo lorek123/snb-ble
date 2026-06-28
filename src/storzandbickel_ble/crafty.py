@@ -27,7 +27,10 @@ from storzandbickel_ble.protocol import (
     CRAFTY_CHAR_TARGET_TEMP,
     CRAFTY_CHAR_USAGE_HOURS,
     CRAFTY_CHAR_USAGE_MINUTES,
+    CRAFTY_PROJECT_STATUS2_AUTO_BLE_SHUTDOWN,
+    CRAFTY_PROJECT_STATUS2_CHARGE_LED_DISABLED,
     CRAFTY_PROJECT_STATUS2_FIND_DEVICE,
+    CRAFTY_PROJECT_STATUS2_TEMP_REACHED,
     CRAFTY_PROJECT_STATUS2_VIBRATION_DISABLED,
     CRAFTY_PROJECT_STATUS_ACTIVE,
     CRAFTY_PROJECT_STATUS_BOOST_ENABLED,
@@ -100,6 +103,27 @@ class CraftyDevice(BaseDevice):
         assert state is not None, "State should never be None"
         assert isinstance(state, CraftyState), "State must be CraftyState"
         return state
+
+    @staticmethod
+    def _apply_project_status2(state: CraftyState, value: int) -> None:
+        """Decode project status register 2 into state fields.
+
+        Shared by the polled read and the notification handler so the two paths
+        can't drift. Vibration and charge-LED bits are inverted (set = disabled),
+        as is the auto-BLE-shutdown bit (set = device sleeps BLE, so clear means
+        permanent Bluetooth).
+        """
+        state.project_status_register_2 = value
+        state.vibration_enabled = not bool(
+            value & CRAFTY_PROJECT_STATUS2_VIBRATION_DISABLED
+        )
+        state.charge_led_enabled = not bool(
+            value & CRAFTY_PROJECT_STATUS2_CHARGE_LED_DISABLED
+        )
+        state.permanent_bluetooth = not bool(
+            value & CRAFTY_PROJECT_STATUS2_AUTO_BLE_SHUTDOWN
+        )
+        state.setpoint_reached = bool(value & CRAFTY_PROJECT_STATUS2_TEMP_REACHED)
 
     async def connect(self) -> None:
         """Connect to device and initialize."""
@@ -319,12 +343,7 @@ class CraftyDevice(BaseDevice):
             # Read project status register 2
             try:
                 data = await self._read_characteristic(CRAFTY_CHAR_PROJECT_STATUS_2)
-                state.project_status_register_2 = decode_uint16(data)
-                # Vibration is inverted: 0 = enabled, 1 = disabled
-                state.vibration_enabled = not bool(
-                    state.project_status_register_2
-                    & CRAFTY_PROJECT_STATUS2_VIBRATION_DISABLED,
-                )
+                self._apply_project_status2(state, decode_uint16(data))
             except Exception as e:
                 _LOGGER.warning("Failed to read project status register 2: %s", e)
 
@@ -468,32 +487,46 @@ class CraftyDevice(BaseDevice):
         state = self._get_state()
         state.auto_off_time = seconds
 
-    async def set_vibration(self, enabled: bool) -> None:
-        """Set vibration enabled/disabled.
+    async def _write_project_status2_bit(self, mask: int, bit_set: bool) -> None:
+        """Read register 2, set or clear `mask`, write it back, and refresh state.
 
-        Args:
-            enabled: True to enable vibration, False to disable
+        The read-modify-write keeps the other bits intact; reusing
+        _apply_project_status2 to re-derive state means every register-2 setter
+        leaves the same consistent view as a poll would.
         """
-        # Read current value first
         try:
-            data = await self._read_characteristic(CRAFTY_CHAR_PROJECT_STATUS_2)
-            current_value = decode_uint16(data)
+            current_value = decode_uint16(
+                await self._read_characteristic(CRAFTY_CHAR_PROJECT_STATUS_2)
+            )
         except Exception:
             current_value = 0
+        new_value = current_value | mask if bit_set else current_value & ~mask
+        await self._write_characteristic(
+            CRAFTY_CHAR_PROJECT_STATUS_2, encode_uint16(new_value)
+        )
+        self._apply_project_status2(self._get_state(), new_value)
 
-        # Vibration is inverted: 0 = enabled, 1 = disabled
-        if enabled:
-            # Clear bit 0 (enable vibration)
-            new_value = current_value & ~CRAFTY_PROJECT_STATUS2_VIBRATION_DISABLED
-        else:
-            # Set bit 0 (disable vibration)
-            new_value = current_value | CRAFTY_PROJECT_STATUS2_VIBRATION_DISABLED
+    async def set_vibration(self, enabled: bool) -> None:
+        """Enable/disable readiness vibration (bit inverted: set = disabled)."""
+        await self._write_project_status2_bit(
+            CRAFTY_PROJECT_STATUS2_VIBRATION_DISABLED, not enabled
+        )
 
-        data_bytes = encode_uint16(new_value)
-        await self._write_characteristic(CRAFTY_CHAR_PROJECT_STATUS_2, data_bytes)
-        state = self._get_state()
-        state.vibration_enabled = enabled
-        state.project_status_register_2 = new_value
+    async def set_charge_led(self, enabled: bool) -> None:
+        """Enable/disable the charge-indicator LED (bit inverted: set = disabled)."""
+        await self._write_project_status2_bit(
+            CRAFTY_PROJECT_STATUS2_CHARGE_LED_DISABLED, not enabled
+        )
+
+    async def set_permanent_bluetooth(self, enabled: bool) -> None:
+        """Keep Bluetooth reachable while the device sleeps.
+
+        The hardware bit enables auto-BLE-shutdown, so permanent Bluetooth is the
+        cleared state.
+        """
+        await self._write_project_status2_bit(
+            CRAFTY_PROJECT_STATUS2_AUTO_BLE_SHUTDOWN, not enabled
+        )
 
     async def toggle_boost_mode(self) -> None:
         """Toggle boost mode on/off in the project status register."""
@@ -646,12 +679,7 @@ class CraftyDevice(BaseDevice):
         """Handle project status register 2 notification."""
         state = self._get_state()
         try:
-            state.project_status_register_2 = decode_uint16(bytearray(data))
-            # Vibration is inverted: 0 = enabled, 1 = disabled
-            state.vibration_enabled = not bool(
-                state.project_status_register_2
-                & CRAFTY_PROJECT_STATUS2_VIBRATION_DISABLED,
-            )
+            self._apply_project_status2(state, decode_uint16(bytearray(data)))
         except Exception as e:
             _LOGGER.warning(
                 "Error handling project status register 2 notification: %s",

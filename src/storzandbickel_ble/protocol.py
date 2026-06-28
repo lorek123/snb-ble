@@ -162,7 +162,14 @@ CRAFTY_PROJECT_STATUS_SUPERBOOST_ENABLED = 0x0040  # Bit 6
 CRAFTY_PROJECT_STATUS2_VIBRATION_DISABLED = (
     0x0001  # Bit 0 (inverted: 0=enabled, 1=disabled)
 )
+CRAFTY_PROJECT_STATUS2_CHARGE_LED_DISABLED = (
+    0x0002  # Bit 1 (inverted: 0=LED on while charging, 1=disabled)
+)
+CRAFTY_PROJECT_STATUS2_TEMP_REACHED = 0x0004  # Bit 2 — setpoint reached
 CRAFTY_PROJECT_STATUS2_FIND_DEVICE = 0x0008  # Bit 3 — auto-clears after 30 s
+CRAFTY_PROJECT_STATUS2_AUTO_BLE_SHUTDOWN = (
+    0x1000  # Bit 12 (inverted: 1=auto-off BLE, 0=permanent Bluetooth)
+)
 
 # Connection settings
 CONNECTION_TIMEOUT = 30.0  # seconds
