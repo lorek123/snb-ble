@@ -372,29 +372,36 @@ class VolcanoDevice(BaseDevice):
             value &= ~VOLCANO_STATUS3_VIBRATION_READY
         await self.set_status_register_3(value)
 
-    async def run_workflow_preset(
+    async def run_workflow(
         self,
-        preset: str,
+        steps: list[tuple[float, float, float]],
         wait_for_temperature: bool = True,
         temperature_tolerance: float = 1.0,
         poll_interval: float = 1.5,
     ) -> None:
-        """Run a Volcano workflow preset.
+        """Run a custom Volcano workflow.
+
+        A workflow is a sequence of ``(target_temperature, hold_seconds,
+        pump_seconds)`` steps: set the temperature, optionally wait for the
+        setpoint, hold for ``hold_seconds``, then run the pump for
+        ``pump_seconds``. This is the same timed heat+pump orchestration the
+        built-in presets use, exposed so callers can run their own balloon/flow
+        sequences.
 
         Args:
-            preset: One of `balloon`, `flow1`, `flow2`, `flow3`.
-            wait_for_temperature: Wait for setpoint before hold/pump phase.
+            steps: Sequence of (target_temp_celsius, hold_seconds, pump_seconds).
+            wait_for_temperature: Wait for the setpoint before the hold/pump phase.
             temperature_tolerance: Acceptable absolute delta from target.
-            poll_interval: Poll interval while waiting for setpoint.
+            poll_interval: Poll interval while waiting for the setpoint.
         """
-        if preset not in VOLCANO_WORKFLOW_PRESETS:
-            msg = f"Unknown workflow preset: {preset}"
+        if not steps:
+            msg = "Workflow must have at least one step"
             raise ValueError(msg)
 
         if not self.state.heater_on:
             await self.turn_heater_on()
 
-        for target_temp, hold_seconds, pump_seconds in VOLCANO_WORKFLOW_PRESETS[preset]:
+        for target_temp, hold_seconds, pump_seconds in steps:
             await self.set_target_temperature(target_temp)
             if wait_for_temperature:
                 while True:
@@ -411,6 +418,31 @@ class VolcanoDevice(BaseDevice):
             await self.turn_pump_on()
             await asyncio.sleep(max(0.5, pump_seconds))
             await self.turn_pump_off()
+
+    async def run_workflow_preset(
+        self,
+        preset: str,
+        wait_for_temperature: bool = True,
+        temperature_tolerance: float = 1.0,
+        poll_interval: float = 1.5,
+    ) -> None:
+        """Run a built-in Volcano workflow preset.
+
+        Args:
+            preset: One of `balloon`, `flow1`, `flow2`, `flow3`.
+            wait_for_temperature: Wait for setpoint before hold/pump phase.
+            temperature_tolerance: Acceptable absolute delta from target.
+            poll_interval: Poll interval while waiting for setpoint.
+        """
+        if preset not in VOLCANO_WORKFLOW_PRESETS:
+            msg = f"Unknown workflow preset: {preset}"
+            raise ValueError(msg)
+        await self.run_workflow(
+            VOLCANO_WORKFLOW_PRESETS[preset],
+            wait_for_temperature=wait_for_temperature,
+            temperature_tolerance=temperature_tolerance,
+            poll_interval=poll_interval,
+        )
 
     async def run_analysis(self) -> dict[str, object]:
         """Run a local Volcano diagnostics report (no cloud upload).

@@ -266,3 +266,55 @@ async def test_volcano_update_state_surfaces_programming_error(
 
     with pytest.raises(AttributeError, match="renamed decoder"):
         await device.update_state()
+
+
+@pytest.mark.asyncio
+async def test_volcano_run_workflow_custom_steps(
+    mock_bleak_client, monkeypatch
+) -> None:
+    """A custom workflow runs each step: set temp, then pump on/off."""
+    device = VolcanoDevice("AA:BB:CC:DD:EE:FF", client=mock_bleak_client)
+    device._connected = True
+    mock_bleak_client.is_connected = True
+    device.state.heater_on = True  # skip the turn_heater_on branch
+    monkeypatch.setattr("storzandbickel_ble.volcano.asyncio.sleep", AsyncMock())
+    device.set_target_temperature = AsyncMock()
+    device.turn_pump_on = AsyncMock()
+    device.turn_pump_off = AsyncMock()
+
+    steps = [(180.0, 0.0, 5.0), (200.0, 0.0, 8.0)]
+    await device.run_workflow(steps, wait_for_temperature=False)
+
+    assert device.set_target_temperature.await_count == 2
+    device.set_target_temperature.assert_any_await(180.0)
+    device.set_target_temperature.assert_any_await(200.0)
+    assert device.turn_pump_on.await_count == 2
+    assert device.turn_pump_off.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_volcano_run_workflow_empty_raises(mock_bleak_client) -> None:
+    """An empty workflow is rejected before any device I/O."""
+    device = VolcanoDevice("AA:BB:CC:DD:EE:FF", client=mock_bleak_client)
+    device._connected = True
+    mock_bleak_client.is_connected = True
+    with pytest.raises(ValueError, match="at least one step"):
+        await device.run_workflow([])
+
+
+@pytest.mark.asyncio
+async def test_volcano_run_workflow_preset_delegates(
+    mock_bleak_client, monkeypatch
+) -> None:
+    """run_workflow_preset forwards the preset's steps to run_workflow."""
+    device = VolcanoDevice("AA:BB:CC:DD:EE:FF", client=mock_bleak_client)
+    device.run_workflow = AsyncMock()
+
+    await device.run_workflow_preset("balloon", wait_for_temperature=False)
+
+    device.run_workflow.assert_awaited_once()
+    passed_steps = device.run_workflow.await_args[0][0]
+    assert len(passed_steps) > 0  # balloon expands to a ramp of steps
+
+    with pytest.raises(ValueError, match="Unknown workflow preset"):
+        await device.run_workflow_preset("nope")
