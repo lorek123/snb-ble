@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.17] - 2026-06-29
+
 ### Added
 - Added `CraftyDevice.set_charge_led()` and `set_permanent_bluetooth()`, toggling the project-status-register-2 charge-LED and auto-BLE-shutdown bits.
 - Added `CraftyState.charge_led_enabled`, `permanent_bluetooth`, and `setpoint_reached`, decoded from project status register 2.
