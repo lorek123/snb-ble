@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.18] - 2026-06-29
+
 ### Changed
 - Extended the `BaseDevice._tolerate` hardening to the Crafty, Venty, and Volcano notification handlers, so a programming error in a notification callback surfaces (and fails tests) instead of being swallowed. The Venty main-notification path still releases any waiting command on a bug so it can't hang.
 
