@@ -167,6 +167,12 @@ CRAFTY_PROJECT_STATUS2_CHARGE_LED_DISABLED = (
 )
 CRAFTY_PROJECT_STATUS2_TEMP_REACHED = 0x0004  # Bit 2 — setpoint reached
 CRAFTY_PROJECT_STATUS2_FIND_DEVICE = 0x0008  # Bit 3 — auto-clears after 30 s
+
+# Crafty diagnostics: error-bit masks (per-bit meaning is decoded server-side).
+CRAFTY_PROJECT_STATUS_ERROR_BITS = 0x2008  # error/fault flags in project status reg 1
+CRAFTY_AKKU_ERROR = (
+    0x8000  # akkuStatusReg2 bit 15 — charger/cable error (known locally)
+)
 CRAFTY_PROJECT_STATUS2_AUTO_BLE_SHUTDOWN = (
     0x1000  # Bit 12 (inverted: 1=auto-off BLE, 0=permanent Bluetooth)
 )
@@ -265,6 +271,30 @@ def clamp_temperature(temp: float, min_temp: float, max_temp: float) -> float:
         Clamped temperature
     """
     return max(min_temp, min(max_temp, temp))
+
+
+def error_finding(
+    source: str,
+    value: int,
+    mask: int,
+    meanings: dict[int, str] | None = None,
+) -> dict[str, object] | None:
+    """Build a structured diagnostics finding for the error bits set in ``value``.
+
+    Returns ``None`` when no error bit (within ``mask``) is set. The per-bit
+    meaning is decoded on Storz & Bickel's servers, not in the client, so
+    ``meaning`` is populated only for the few bits whose cause is known locally
+    (passed via ``meanings``); otherwise the hex of the set error bits is reported
+    so it can be handed to support / the vendor app for interpretation.
+    """
+    bits = value & mask
+    if not bits:
+        return None
+    meaning: str | None = None
+    if meanings:
+        named = [text for bit, text in meanings.items() if bits & bit]
+        meaning = "; ".join(named) or None
+    return {"source": source, "bits": f"0x{bits:04x}", "meaning": meaning}
 
 
 def check_bit(value: int, bit: int) -> bool:

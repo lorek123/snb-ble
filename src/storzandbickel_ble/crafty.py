@@ -10,6 +10,7 @@ from storzandbickel_ble.device import _PROGRAMMING_ERRORS, BaseDevice
 from storzandbickel_ble.exceptions import InvalidDataError
 from storzandbickel_ble.models import CraftyState, DeviceType
 from storzandbickel_ble.protocol import (
+    CRAFTY_AKKU_ERROR,
     CRAFTY_CHAR_AKKU_STATUS,
     CRAFTY_CHAR_AUTO_OFF,
     CRAFTY_CHAR_BATTERY,
@@ -34,6 +35,7 @@ from storzandbickel_ble.protocol import (
     CRAFTY_PROJECT_STATUS2_VIBRATION_DISABLED,
     CRAFTY_PROJECT_STATUS_ACTIVE,
     CRAFTY_PROJECT_STATUS_BOOST_ENABLED,
+    CRAFTY_PROJECT_STATUS_ERROR_BITS,
     CRAFTY_PROJECT_STATUS_SUPERBOOST_ENABLED,
     CRAFTY_STATUS_BOOST_MODE,
     CRAFTY_STATUS_FAHRENHEIT,
@@ -47,6 +49,7 @@ from storzandbickel_ble.protocol import (
     decode_uint16,
     encode_temperature,
     encode_uint16,
+    error_finding,
 )
 
 if TYPE_CHECKING:
@@ -568,11 +571,15 @@ class CraftyDevice(BaseDevice):
         state.project_status_register_2 = new_val
 
     async def run_analysis(self) -> dict[str, object]:
-        """Run local Crafty diagnostics summary (no cloud upload)."""
+        """Run a local Crafty diagnostics report (no cloud upload).
+
+        Reports the set error bits (detection) and the raw registers for support.
+        Per-bit causes are decoded server-side, except the akku charger/cable
+        error flag, which is known locally.
+        """
         await self.update_state()
         state = self.state
         warnings: list[str] = []
-        errors: list[str] = []
 
         if state.led_brightness < 10:
             warnings.append("LED brightness is low.")
@@ -580,15 +587,47 @@ class CraftyDevice(BaseDevice):
             warnings.append("Vibration is disabled.")
         if not state.device_active:
             warnings.append("Device is not active.")
-        if state.project_status_register & 0x2008:
-            errors.append("Project status indicates error condition.")
 
+        akku = 0
+        try:
+            akku = decode_uint16(
+                await self._read_characteristic(CRAFTY_CHAR_AKKU_STATUS)
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("Akku status register unavailable during analysis: %s", err)
+
+        findings: list[dict[str, object]] = []
+        proj = error_finding(
+            "project_status_register",
+            state.project_status_register,
+            CRAFTY_PROJECT_STATUS_ERROR_BITS,
+        )
+        if proj is not None:
+            findings.append(proj)
+        charger = error_finding(
+            "akku_status",
+            akku,
+            CRAFTY_AKKU_ERROR,
+            {CRAFTY_AKKU_ERROR: "charger or cable error"},
+        )
+        if charger is not None:
+            findings.append(charger)
+
+        errors = [
+            f"{f['source']} error flags set: {f['bits']}"
+            + (f" ({f['meaning']})" if f["meaning"] else "")
+            for f in findings
+        ]
         return {
             "ok": not errors,
             "warnings": warnings,
             "errors": errors,
-            "project_status_register": state.project_status_register,
-            "project_status_register_2": state.project_status_register_2,
+            "findings": findings,
+            "diagnostics": {
+                "project_status_register": f"0x{state.project_status_register:04x}",
+                "project_status_register_2": f"0x{state.project_status_register_2:04x}",
+                "akku_status": f"0x{akku:04x}",
+            },
         }
 
     def _handle_temperature_notification(self, data: bytes) -> None:

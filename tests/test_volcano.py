@@ -13,6 +13,7 @@ from storzandbickel_ble.protocol import (
     VOLCANO_CHAR_STATUS_REGISTER_2,
     VOLCANO_CHAR_STATUS_REGISTER_3,
     VOLCANO_CHAR_TARGET_TEMP,
+    VOLCANO_STATUS1_ERROR_BITS,
     VOLCANO_STATUS2_DISPLAY_COOLING,
     VOLCANO_STATUS2_FAHRENHEIT,
     VOLCANO_STATUS3_VIBRATION_READY,
@@ -154,6 +155,31 @@ async def test_volcano_run_analysis(mock_bleak_client) -> None:
     assert result["ok"] is True
     assert "Display brightness is low." in result["warnings"]
     assert "Display-on-cooling is disabled." in result["warnings"]
+    assert result["findings"] == []
+    # Raw registers + history are surfaced as hex for support.
+    diag = result["diagnostics"]
+    assert diag["status_register_1"].startswith("0x")
+    assert "history_1" in diag and "history_2" in diag
+
+
+@pytest.mark.asyncio
+async def test_volcano_run_analysis_detects_error_bits(mock_bleak_client) -> None:
+    """Set error bits and confirm they surface as a finding + error, ok=False."""
+    device = VolcanoDevice("AA:BB:CC:DD:EE:FF", client=mock_bleak_client)
+    device._connected = True
+    mock_bleak_client.is_connected = True
+    device.state.status_register_1 = VOLCANO_STATUS1_ERROR_BITS
+    device.update_state = AsyncMock()
+
+    result = await device.run_analysis()
+
+    assert result["ok"] is False
+    assert result["errors"]
+    findings = result["findings"]
+    assert len(findings) == 1
+    assert findings[0]["source"] == "status_register_1"
+    assert findings[0]["bits"] == f"0x{VOLCANO_STATUS1_ERROR_BITS:04x}"
+    assert findings[0]["meaning"] is None  # per-bit cause is cloud-decoded
 
 
 @pytest.mark.asyncio

@@ -440,8 +440,17 @@ class VentyDevice(BaseDevice):
         state.boost_timeout_disabled = disabled
 
     async def run_analysis(self) -> dict[str, object]:
-        """Run local Venty/Veazy diagnostics summary (no cloud upload)."""
+        """Run a local Venty/Veazy diagnostics report (no cloud upload).
+
+        Venty/Veazy emit a 512-byte analysis blob that the vendor app uploads to
+        Storz & Bickel for server-side decoding — there is no client-side
+        interpretation. This returns the locally-decoded settings/state plus
+        heuristic warnings; the detailed report is available only via the
+        official app/cloud.
+        """
         await self.update_state()
+        # Nudge the device to refresh its analysis registers; the decoded report
+        # itself is cloud-only, so we don't collect the raw blob here.
         await self._send_command(VENTY_CMD_DEVICE_ANALYSIS, wait_response=False)
         state = self.state
         warnings: list[str] = []
@@ -459,8 +468,20 @@ class VentyDevice(BaseDevice):
             "ok": True,
             "warnings": warnings,
             "errors": [],
-            "battery_level": state.battery_level,
-            "heater_mode": state.heater_mode.name,
+            "findings": [],
+            "diagnostics": {
+                "battery_level": state.battery_level,
+                "heater_mode": state.heater_mode.name,
+                "boost_offset": state.boost_offset,
+                "superboost_offset": state.superboost_offset,
+                "charger_connected": state.charger_connected,
+                "eco_mode_charge": state.eco_mode_charge,
+                "eco_mode_voltage": state.eco_mode_voltage,
+                "auto_shutoff_countdown": state.auto_shutoff_countdown,
+                "note": (
+                    "Detailed analysis is decoded by the Storz & Bickel app/cloud only."
+                ),
+            },
         }
 
     def _handle_main_notification(self, data: bytes) -> None:

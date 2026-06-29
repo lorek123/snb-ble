@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 from storzandbickel_ble.crafty import CraftyDevice
 from storzandbickel_ble.protocol import (
+    CRAFTY_AKKU_ERROR,
     CRAFTY_CHAR_BOOST_TEMP,
     CRAFTY_CHAR_PROJECT_STATUS_2,
     CRAFTY_CHAR_TARGET_TEMP,
@@ -81,6 +82,28 @@ async def test_crafty_run_analysis(mock_bleak_client) -> None:
     assert result["ok"] is True
     assert "LED brightness is low." in result["warnings"]
     assert "Vibration is disabled." in result["warnings"]
+    assert result["findings"] == []
+    diag = result["diagnostics"]
+    assert diag["project_status_register"].startswith("0x")
+    assert "akku_status" in diag
+
+
+@pytest.mark.asyncio
+async def test_crafty_run_analysis_detects_charger_error(mock_bleak_client) -> None:
+    """The akku charger/cable error bit is decoded into a named finding."""
+    device = CraftyDevice("AA:BB:CC:DD:EE:FF", client=mock_bleak_client)
+    device._connected = True
+    mock_bleak_client.is_connected = True
+    device.update_state = AsyncMock()
+    # In run_analysis the only live read is the akku status register.
+    mock_bleak_client.read_gatt_char.return_value = encode_uint16(CRAFTY_AKKU_ERROR)
+
+    result = await device.run_analysis()
+
+    assert result["ok"] is False
+    charger = next(f for f in result["findings"] if f["source"] == "akku_status")
+    assert charger["meaning"] == "charger or cable error"
+    assert "charger or cable error" in " ".join(result["errors"])
 
 
 def test_crafty_diagnostics_snapshot_sanitizes_serial() -> None:

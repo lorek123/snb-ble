@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Enriched `run_analysis` on all device classes with a consistent schema: `ok`, `warnings`, `errors`, a structured `findings` list (which error-mask bits are set per register), and a `diagnostics` map of raw register/history values (as hex). Per-bit error *meanings* are decoded on Storz & Bickel's servers, not in the client, so only the locally-known cases (e.g. the Crafty akku charger/cable error) carry a `meaning`; Venty/Veazy note that the detailed report is cloud-only.
+
 ## [0.1.18] - 2026-06-29
 
 ### Changed

@@ -153,6 +153,10 @@ async def test_venty_run_analysis(mock_bleak_client) -> None:
     assert result["ok"] is True
     assert "Display brightness reduced from default." in result["warnings"]
     assert "Vibration is disabled." in result["warnings"]
+    assert result["findings"] == []
+    diag = result["diagnostics"]
+    assert "battery_level" in diag and "heater_mode" in diag
+    assert "cloud" in diag["note"].lower()  # decoded report is cloud-only
 
 
 @pytest.mark.asyncio

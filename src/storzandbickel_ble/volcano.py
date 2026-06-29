@@ -43,6 +43,7 @@ from storzandbickel_ble.protocol import (
     decode_uint16,
     encode_temperature,
     encode_uint16,
+    error_finding,
 )
 
 if TYPE_CHECKING:
@@ -412,11 +413,16 @@ class VolcanoDevice(BaseDevice):
             await self.turn_pump_off()
 
     async def run_analysis(self) -> dict[str, object]:
-        """Run local Volcano diagnostics summary (no cloud upload)."""
+        """Run a local Volcano diagnostics report (no cloud upload).
+
+        The vendor app only flags *whether* error bits are set and uploads the
+        registers for server-side decoding, so this reports the set error bits
+        (detection) and the raw registers/history for support — not a
+        human-readable per-bit cause, which is not available client-side.
+        """
         await self.update_state()
         state = self.state
         warnings: list[str] = []
-        errors: list[str] = []
 
         if state.led_brightness < 3:
             warnings.append("Display brightness is low.")
@@ -424,10 +430,15 @@ class VolcanoDevice(BaseDevice):
             warnings.append("Display-on-cooling is disabled.")
         if not state.vibration_on_ready:
             warnings.append("Vibration-on-ready is disabled.")
-        if state.status_register_1 & VOLCANO_STATUS1_ERROR_BITS:
-            errors.append("Status register 1 indicates device error flags.")
-        if state.status_register_2 & VOLCANO_STATUS2_ERROR_BITS:
-            errors.append("Status register 2 indicates device error flags.")
+
+        findings: list[dict[str, object]] = []
+        for source, value, mask in (
+            ("status_register_1", state.status_register_1, VOLCANO_STATUS1_ERROR_BITS),
+            ("status_register_2", state.status_register_2, VOLCANO_STATUS2_ERROR_BITS),
+        ):
+            finding = error_finding(source, value, mask)
+            if finding is not None:
+                findings.append(finding)
 
         history_1 = ""
         history_2 = ""
@@ -437,15 +448,19 @@ class VolcanoDevice(BaseDevice):
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("History registers unavailable during analysis: %s", err)
 
+        errors = [f"{f['source']} error flags set: {f['bits']}" for f in findings]
         return {
             "ok": not errors,
             "warnings": warnings,
             "errors": errors,
-            "history_1": history_1,
-            "history_2": history_2,
-            "status_register_1": state.status_register_1,
-            "status_register_2": state.status_register_2,
-            "status_register_3": state.status_register_3,
+            "findings": findings,
+            "diagnostics": {
+                "status_register_1": f"0x{state.status_register_1:04x}",
+                "status_register_2": f"0x{state.status_register_2:04x}",
+                "status_register_3": f"0x{state.status_register_3:04x}",
+                "history_1": history_1,
+                "history_2": history_2,
+            },
         }
 
     def _handle_temperature_notification(self, data: bytes) -> None:
