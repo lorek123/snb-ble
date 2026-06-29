@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.20] - 2026-06-29
+
 ### Added
 - Added `VolcanoDevice.run_workflow(steps)` to run a custom timed heat+pump sequence — a list of `(target_temperature, hold_seconds, pump_seconds)` steps. This is the engine the built-in presets already used, now exposed for user-defined balloon/flow workflows; `run_workflow_preset` is a thin wrapper over it.
 
