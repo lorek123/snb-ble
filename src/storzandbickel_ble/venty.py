@@ -546,6 +546,11 @@ class VentyDevice(BaseDevice):
                 self._response_data = data_array
                 self._response_event.set()
 
+        except _PROGRAMMING_ERRORS:
+            # Release any waiting command so it can't hang, then surface the bug.
+            if self._response_event is not None:
+                self._response_event.set()
+            raise
         except Exception as e:
             _LOGGER.warning("Error handling main notification: %s", e)
             if self._response_event is not None:

@@ -594,27 +594,23 @@ class CraftyDevice(BaseDevice):
     def _handle_temperature_notification(self, data: bytes) -> None:
         """Handle temperature notification."""
         state = self._get_state()
-        try:
+        with self._tolerate("handle temperature notification"):
             state.current_temperature = decode_temperature(bytearray(data))
             _LOGGER.debug("Temperature update: %s°C", state.current_temperature)
-        except Exception as e:
-            _LOGGER.warning("Error handling temperature notification: %s", e)
 
     def _handle_battery_notification(self, data: bytes) -> None:
         """Handle battery notification."""
         state = self._get_state()
-        try:
+        with self._tolerate("handle battery notification"):
             data_array = bytearray(data)
             if len(data_array) >= 1:
                 state.battery_level = data_array[0]
                 _LOGGER.debug("Battery update: %s%%", state.battery_level)
-        except Exception as e:
-            _LOGGER.warning("Error handling battery notification: %s", e)
 
     def _handle_status_notification(self, data: bytes) -> None:
         """Handle status register notification."""
         state = self._get_state()
-        try:
+        with self._tolerate("handle status register notification"):
             data_array = bytearray(data)
             if len(data_array) >= 10:
                 # Full format: 8-byte serial number + 2-byte status register
@@ -632,13 +628,11 @@ class CraftyDevice(BaseDevice):
                 state.fahrenheit_mode = bool(
                     state.status_register & CRAFTY_STATUS_FAHRENHEIT,
                 )
-        except Exception as e:
-            _LOGGER.warning("Error handling status register notification: %s", e)
 
     def _handle_project_status_notification(self, data: bytes) -> None:
         """Handle project status register notification."""
         state = self._get_state()
-        try:
+        with self._tolerate("handle project status register notification"):
             state.project_status_register = decode_uint16(bytearray(data))
             state.device_active = bool(
                 state.project_status_register & CRAFTY_PROJECT_STATUS_ACTIVE,
@@ -651,29 +645,18 @@ class CraftyDevice(BaseDevice):
                 state.project_status_register
                 & CRAFTY_PROJECT_STATUS_SUPERBOOST_ENABLED,
             )
-        except Exception as e:
-            _LOGGER.warning(
-                "Error handling project status register notification: %s", e
-            )
 
     def _handle_project_status2_notification(self, data: bytes) -> None:
         """Handle project status register 2 notification."""
         state = self._get_state()
-        try:
+        with self._tolerate("handle project status register 2 notification"):
             self._apply_project_status2(state, decode_uint16(bytearray(data)))
-        except Exception as e:
-            _LOGGER.warning(
-                "Error handling project status register 2 notification: %s",
-                e,
-            )
 
     def _handle_akku_status_notification(self, data: bytes) -> None:
         """Handle Akku status notification (akkuStatusReg2 — error diagnostics only)."""
-        try:
+        with self._tolerate("handle Akku status notification"):
             val = int.from_bytes(data[:2], "little") if len(data) >= 2 else 0
             if val & 0x8000:
                 _LOGGER.warning(
                     "Crafty charger/cable error reported (akkuStatusReg2 bit 15)"
                 )
-        except Exception as e:
-            _LOGGER.warning("Error handling Akku status notification: %s", e)

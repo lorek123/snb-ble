@@ -228,3 +228,16 @@ async def test_crafty_update_state_surfaces_programming_error(
 
     with pytest.raises(AttributeError, match="renamed field"):
         await device.update_state()
+
+
+def test_crafty_notification_surfaces_programming_error() -> None:
+    """A bug in a notification handler propagates instead of being swallowed."""
+    device = CraftyDevice("AA:BB:CC:DD:EE:FF", name="CRAFTY")
+
+    def boom(_state, _value) -> None:
+        raise AttributeError("renamed field")
+
+    device._apply_project_status2 = boom  # type: ignore[method-assign]
+
+    with pytest.raises(AttributeError, match="renamed field"):
+        device._handle_project_status2_notification(bytes([0x00, 0x00]))

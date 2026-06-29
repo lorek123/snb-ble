@@ -451,16 +451,14 @@ class VolcanoDevice(BaseDevice):
     def _handle_temperature_notification(self, data: bytes) -> None:
         """Handle temperature notification."""
         state = self._get_state()
-        try:
+        with self._tolerate("handle temperature notification"):
             state.current_temperature = decode_temperature(bytearray(data))
             _LOGGER.debug("Temperature update: %s°C", state.current_temperature)
-        except Exception as e:
-            _LOGGER.warning("Error handling temperature notification: %s", e)
 
     def _handle_status1_notification(self, data: bytes) -> None:
         """Handle status register 1 notification."""
         state = self._get_state()
-        try:
+        with self._tolerate("handle status register 1 notification"):
             state.status_register_1 = decode_uint16(bytearray(data))
             state.heater_on = bool(
                 state.status_register_1 & VOLCANO_STATUS1_HEATER_ON,
@@ -471,13 +469,11 @@ class VolcanoDevice(BaseDevice):
             state.pump_on = bool(
                 state.status_register_1 & VOLCANO_STATUS1_PUMP_ON,
             )
-        except Exception as e:
-            _LOGGER.warning("Error handling status register 1 notification: %s", e)
 
     def _handle_status2_notification(self, data: bytes) -> None:
         """Handle status register 2 notification."""
         state = self._get_state()
-        try:
+        with self._tolerate("handle status register 2 notification"):
             state.status_register_2 = decode_uint16(bytearray(data))
             state.fahrenheit_mode = bool(
                 state.status_register_2 & VOLCANO_STATUS2_FAHRENHEIT,
@@ -485,32 +481,24 @@ class VolcanoDevice(BaseDevice):
             state.display_on_cooling = bool(
                 state.status_register_2 & VOLCANO_STATUS2_DISPLAY_COOLING,
             )
-        except Exception as e:
-            _LOGGER.warning("Error handling status register 2 notification: %s", e)
 
     def _handle_status3_notification(self, data: bytes) -> None:
         """Handle status register 3 notification."""
         state = self._get_state()
-        try:
+        with self._tolerate("handle status register 3 notification"):
             state.status_register_3 = decode_uint16(bytearray(data))
             state.vibration_on_ready = bool(
                 state.status_register_3 & VOLCANO_STATUS3_VIBRATION_READY,
             )
-        except Exception as e:
-            _LOGGER.warning("Error handling status register 3 notification: %s", e)
 
     def _handle_heating_hours_notification(self, data: bytes) -> None:
         """Handle heating hours notification."""
         state = self._get_state()
-        try:
+        with self._tolerate("handle heating hours notification"):
             state.heating_hours = decode_uint16(bytearray(data))
-        except Exception as e:
-            _LOGGER.warning("Error handling heating hours notification: %s", e)
 
     def _handle_heating_minutes_notification(self, data: bytes) -> None:
         """Handle heating minutes notification."""
         state = self._get_state()
-        try:
+        with self._tolerate("handle heating minutes notification"):
             state.heating_minutes = decode_uint16(bytearray(data))
-        except Exception as e:
-            _LOGGER.warning("Error handling heating minutes notification: %s", e)

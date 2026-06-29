@@ -224,3 +224,24 @@ async def test_venty_set_boost_visualization(mock_bleak_client) -> None:
     await device.set_boost_visualization(True)
     mock_bleak_client.write_gatt_char.assert_called()
     assert device.state.boost_visualization is True
+
+
+def test_venty_main_notification_surfaces_bug_and_releases_waiter(monkeypatch) -> None:
+    """A bug in the main handler propagates, but the command waiter is still released."""
+    import asyncio
+
+    device = VentyDevice("AA:BB:CC:DD:EE:FF")
+    event = asyncio.Event()
+    device._response_event = event
+
+    def boom(_value):
+        raise AttributeError("renamed enum")
+
+    monkeypatch.setattr("storzandbickel_ble.venty.HeaterMode", boom)
+
+    data = bytearray(15)
+    data[0] = 0x01  # VENTY_CMD_STATUS_CONTROL
+
+    with pytest.raises(AttributeError, match="renamed enum"):
+        device._handle_main_notification(bytes(data))
+    assert event.is_set()  # waiter released despite the bug
