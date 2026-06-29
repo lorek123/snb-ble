@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from bleak import BleakClient
 
-from storzandbickel_ble.device import BaseDevice
+from storzandbickel_ble.device import _PROGRAMMING_ERRORS, BaseDevice
 from storzandbickel_ble.exceptions import InvalidDataError
 from storzandbickel_ble.models import DeviceType, TemperatureUnit, VolcanoState
 from storzandbickel_ble.protocol import (
@@ -175,35 +175,27 @@ class VolcanoDevice(BaseDevice):
         state = self._get_state()
         try:
             # Read firmware version
-            try:
+            with self._tolerate("read firmware version"):
                 data = await self._read_characteristic(VOLCANO_CHAR_FIRMWARE_VERSION)
                 state.firmware_version = decode_string(data)
-            except Exception as e:
-                _LOGGER.warning("Failed to read firmware version: %s", e)
 
             # Read serial number
-            try:
+            with self._tolerate("read serial number"):
                 data = await self._read_characteristic(VOLCANO_CHAR_SERIAL_NUMBER)
                 state.serial_number = decode_string(data)
-            except Exception as e:
-                _LOGGER.warning("Failed to read serial number: %s", e)
 
             # Read current temperature
-            try:
+            with self._tolerate("read current temperature"):
                 data = await self._read_characteristic(VOLCANO_CHAR_CURRENT_TEMP)
                 state.current_temperature = decode_temperature(data)
-            except Exception as e:
-                _LOGGER.warning("Failed to read current temperature: %s", e)
 
             # Read target temperature
-            try:
+            with self._tolerate("read target temperature"):
                 data = await self._read_characteristic(VOLCANO_CHAR_TARGET_TEMP)
                 state.target_temperature = decode_temperature(data)
-            except Exception as e:
-                _LOGGER.warning("Failed to read target temperature: %s", e)
 
             # Read status registers
-            try:
+            with self._tolerate("read status register 1"):
                 data = await self._read_characteristic(VOLCANO_CHAR_STATUS_REGISTER_1)
                 state.status_register_1 = decode_uint16(data)
                 state.heater_on = bool(
@@ -215,10 +207,8 @@ class VolcanoDevice(BaseDevice):
                 state.pump_on = bool(
                     state.status_register_1 & VOLCANO_STATUS1_PUMP_ON,
                 )
-            except Exception as e:
-                _LOGGER.warning("Failed to read status register 1: %s", e)
 
-            try:
+            with self._tolerate("read status register 2"):
                 data = await self._read_characteristic(VOLCANO_CHAR_STATUS_REGISTER_2)
                 state.status_register_2 = decode_uint16(data)
                 state.fahrenheit_mode = bool(
@@ -227,46 +217,37 @@ class VolcanoDevice(BaseDevice):
                 state.display_on_cooling = bool(
                     state.status_register_2 & VOLCANO_STATUS2_DISPLAY_COOLING,
                 )
-            except Exception as e:
-                _LOGGER.warning("Failed to read status register 2: %s", e)
 
-            try:
+            with self._tolerate("read status register 3"):
                 data = await self._read_characteristic(VOLCANO_CHAR_STATUS_REGISTER_3)
                 state.status_register_3 = decode_uint16(data)
                 state.vibration_on_ready = bool(
                     state.status_register_3 & VOLCANO_STATUS3_VIBRATION_READY,
                 )
-            except Exception as e:
-                _LOGGER.warning("Failed to read status register 3: %s", e)
 
             # Read LED brightness
-            try:
+            with self._tolerate("read LED brightness"):
                 data = await self._read_characteristic(VOLCANO_CHAR_LED_BRIGHTNESS)
                 state.led_brightness = decode_uint16(data)
-            except Exception as e:
-                _LOGGER.warning("Failed to read LED brightness: %s", e)
 
             # Read auto-off time
-            try:
+            with self._tolerate("read auto-off time"):
                 data = await self._read_characteristic(VOLCANO_CHAR_AUTO_OFF)
                 state.auto_off_time = decode_uint16(data)
-            except Exception as e:
-                _LOGGER.warning("Failed to read auto-off time: %s", e)
 
             # Read heating hours
-            try:
+            with self._tolerate("read heating hours"):
                 data = await self._read_characteristic(VOLCANO_CHAR_HEATING_HOURS)
                 state.heating_hours = decode_uint16(data)
-            except Exception as e:
-                _LOGGER.warning("Failed to read heating hours: %s", e)
 
             # Read heating minutes
-            try:
+            with self._tolerate("read heating minutes"):
                 data = await self._read_characteristic(VOLCANO_CHAR_HEATING_MINUTES)
                 state.heating_minutes = decode_uint16(data)
-            except Exception as e:
-                _LOGGER.warning("Failed to read heating minutes: %s", e)
 
+        except _PROGRAMMING_ERRORS:
+            # A library bug, not a device problem — surface it with its real type.
+            raise
         except Exception as e:
             _LOGGER.error("Error updating state: %s", e, exc_info=True)
             raise InvalidDataError(f"Failed to update state: {e}") from e

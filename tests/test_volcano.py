@@ -222,3 +222,21 @@ async def test_volcano_set_auto_off_time_negative_raises(mock_bleak_client) -> N
 
     with pytest.raises(ValueError, match="Auto-off time must be >= 0"):
         await device.set_auto_off_time(-5)
+
+
+@pytest.mark.asyncio
+async def test_volcano_update_state_surfaces_programming_error(
+    mock_bleak_client, monkeypatch
+) -> None:
+    """A bug inside a poll step propagates with its real type, not as stale state."""
+    device = VolcanoDevice("AA:BB:CC:DD:EE:FF", client=mock_bleak_client)
+    device._connected = True
+    mock_bleak_client.is_connected = True
+
+    def boom(_data) -> int:
+        raise AttributeError("renamed decoder")
+
+    monkeypatch.setattr("storzandbickel_ble.volcano.decode_uint16", boom)
+
+    with pytest.raises(AttributeError, match="renamed decoder"):
+        await device.update_state()

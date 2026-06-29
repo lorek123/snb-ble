@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from bleak import BleakClient
 
-from storzandbickel_ble.device import BaseDevice
+from storzandbickel_ble.device import _PROGRAMMING_ERRORS, BaseDevice
 from storzandbickel_ble.exceptions import CommandTimeoutError, InvalidDataError
 from storzandbickel_ble.models import (
     HeaterMode,
@@ -160,7 +160,7 @@ class VentyDevice(BaseDevice):
             await asyncio.sleep(0.1)
 
             # Also try reading device name (contains serial number)
-            try:
+            with self._tolerate("read device name"):
                 data = await self._read_characteristic(VENTY_CHAR_DEVICE_NAME)
                 # Device name may contain serial number
                 name_str = decode_string(data)
@@ -168,9 +168,10 @@ class VentyDevice(BaseDevice):
                     state = self._get_state()
                     if not state.serial_number:
                         state.serial_number = name_str
-            except Exception as e:
-                _LOGGER.warning("Failed to read device name: %s", e)
 
+        except _PROGRAMMING_ERRORS:
+            # A library bug, not a device problem — surface it with its real type.
+            raise
         except Exception as e:
             _LOGGER.error("Error updating state: %s", e, exc_info=True)
             raise InvalidDataError(f"Failed to update state: {e}") from e
