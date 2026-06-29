@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from bleak import BleakClient
 
-from storzandbickel_ble.device import BaseDevice
+from storzandbickel_ble.device import _PROGRAMMING_ERRORS, BaseDevice
 from storzandbickel_ble.exceptions import InvalidDataError
 from storzandbickel_ble.models import CraftyState, DeviceType
 from storzandbickel_ble.protocol import (
@@ -272,7 +272,7 @@ class CraftyDevice(BaseDevice):
         state = self._get_state()
         try:
             # Read status register (contains serial number in first 8 bytes)
-            try:
+            with self._tolerate("read status register"):
                 data = await self._read_characteristic(CRAFTY_CHAR_STATUS_REGISTER)
                 if len(data) >= 10:
                     # Full format: 8-byte serial number + 2-byte status register
@@ -294,33 +294,25 @@ class CraftyDevice(BaseDevice):
                     state.fahrenheit_mode = bool(
                         state.status_register & CRAFTY_STATUS_FAHRENHEIT,
                     )
-            except Exception as e:
-                _LOGGER.warning("Failed to read status register: %s", e)
 
             # Read current temperature
-            try:
+            with self._tolerate("read current temperature"):
                 data = await self._read_characteristic(CRAFTY_CHAR_CURRENT_TEMP)
                 state.current_temperature = decode_temperature(data)
-            except Exception as e:
-                _LOGGER.warning("Failed to read current temperature: %s", e)
 
             # Read target temperature
-            try:
+            with self._tolerate("read target temperature"):
                 data = await self._read_characteristic(CRAFTY_CHAR_TARGET_TEMP)
                 state.target_temperature = decode_temperature(data)
-            except Exception as e:
-                _LOGGER.warning("Failed to read target temperature: %s", e)
 
             # Read battery level
-            try:
+            with self._tolerate("read battery level"):
                 data = await self._read_characteristic(CRAFTY_CHAR_BATTERY)
                 if len(data) >= 1:
                     state.battery_level = data[0]
-            except Exception as e:
-                _LOGGER.warning("Failed to read battery level: %s", e)
 
             # Read project status register
-            try:
+            with self._tolerate("read project status register"):
                 data = await self._read_characteristic(CRAFTY_CHAR_PROJECT_STATUS)
                 state.project_status_register = decode_uint16(data)
                 state.device_active = bool(
@@ -337,51 +329,40 @@ class CraftyDevice(BaseDevice):
                     state.project_status_register
                     & CRAFTY_PROJECT_STATUS_SUPERBOOST_ENABLED,
                 )
-            except Exception as e:
-                _LOGGER.warning("Failed to read project status register: %s", e)
 
             # Read project status register 2
-            try:
+            with self._tolerate("read project status register 2"):
                 data = await self._read_characteristic(CRAFTY_CHAR_PROJECT_STATUS_2)
                 self._apply_project_status2(state, decode_uint16(data))
-            except Exception as e:
-                _LOGGER.warning("Failed to read project status register 2: %s", e)
 
             # Read boost temperature
-            try:
+            with self._tolerate("read boost temperature"):
                 data = await self._read_characteristic(CRAFTY_CHAR_BOOST_TEMP)
                 state.boost_temperature = decode_temperature(data)
-            except Exception as e:
-                _LOGGER.warning("Failed to read boost temperature: %s", e)
 
             # Read LED brightness
-            try:
+            with self._tolerate("read LED brightness"):
                 data = await self._read_characteristic(CRAFTY_CHAR_LED_BRIGHTNESS)
                 state.led_brightness = decode_uint16(data)
-            except Exception as e:
-                _LOGGER.warning("Failed to read LED brightness: %s", e)
 
             # Read auto-off time
-            try:
+            with self._tolerate("read auto-off time"):
                 data = await self._read_characteristic(CRAFTY_CHAR_AUTO_OFF)
                 state.auto_off_time = decode_uint16(data)
-            except Exception as e:
-                _LOGGER.warning("Failed to read auto-off time: %s", e)
 
             # Read usage hours
-            try:
+            with self._tolerate("read usage hours"):
                 data = await self._read_characteristic(CRAFTY_CHAR_USAGE_HOURS)
                 state.usage_hours = decode_uint16(data)
-            except Exception as e:
-                _LOGGER.warning("Failed to read usage hours: %s", e)
 
             # Read usage minutes
-            try:
+            with self._tolerate("read usage minutes"):
                 data = await self._read_characteristic(CRAFTY_CHAR_USAGE_MINUTES)
                 state.usage_minutes = decode_uint16(data)
-            except Exception as e:
-                _LOGGER.warning("Failed to read usage minutes: %s", e)
 
+        except _PROGRAMMING_ERRORS:
+            # A library bug, not a device problem — surface it with its real type.
+            raise
         except Exception as e:
             _LOGGER.error("Error updating state: %s", e, exc_info=True)
             raise InvalidDataError(f"Failed to update state: {e}") from e

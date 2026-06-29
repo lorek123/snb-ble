@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added tests covering the Venty (boost/superboost offset, ECO charge/voltage, boost visualization) and Volcano (LED brightness, auto-off) setters that the Home Assistant integration depends on.
 
 ### Changed
+- Hardened the Crafty poll loop via `BaseDevice._tolerate`: per-characteristic device/transport errors are still tolerated, but programming errors (missing import, renamed attribute) now surface with their real type instead of being silently swallowed as stale state.
 - Decoded and wrote Crafty project status register 2 through shared helpers (`_apply_project_status2`, `_write_project_status2_bit`) so polling, notifications, and setters can't drift.
 - Serialized per-device BLE I/O operations in `BaseDevice` to reduce read/write overlap races.
 - Updated docs with supported-function matrix, data update model, concurrency contract, known limitations, and troubleshooting guidance.

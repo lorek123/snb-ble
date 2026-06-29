@@ -196,3 +196,35 @@ def test_crafty_apply_project_status2_decodes_all_bits() -> None:
     assert state.charge_led_enabled is True
     assert state.setpoint_reached is False
     assert state.permanent_bluetooth is False
+
+
+def test_tolerate_swallows_expected_but_reraises_bugs() -> None:
+    """`_tolerate` continues past device/transport errors but never hides bugs."""
+    device = CraftyDevice("AA:BB:CC:DD:EE:FF", name="CRAFTY")
+
+    # Expected/transient failures are swallowed so one bad read can't abort a poll.
+    with device._tolerate("read something"):
+        raise ValueError("garbled payload")
+
+    # Programming errors propagate so a refactor mistake surfaces.
+    with pytest.raises(AttributeError):
+        with device._tolerate("read something"):
+            raise AttributeError("renamed field")
+
+
+@pytest.mark.asyncio
+async def test_crafty_update_state_surfaces_programming_error(
+    mock_bleak_client,
+) -> None:
+    """A bug inside a poll step propagates with its real type, not as stale state."""
+    device = CraftyDevice("AA:BB:CC:DD:EE:FF", client=mock_bleak_client)
+    device._connected = True
+    mock_bleak_client.is_connected = True
+
+    def boom(_state, _value) -> None:
+        raise AttributeError("renamed field")
+
+    device._apply_project_status2 = boom  # type: ignore[method-assign]
+
+    with pytest.raises(AttributeError, match="renamed field"):
+        await device.update_state()

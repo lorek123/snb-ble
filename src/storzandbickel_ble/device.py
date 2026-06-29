@@ -1,8 +1,10 @@
 """Base device class for Storz & Bickel BLE devices."""
 
 import asyncio
+import contextlib
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from typing import TYPE_CHECKING
 
 from bleak import BleakClient, BleakGATTCharacteristic
@@ -19,6 +21,12 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 _LOGGER = logging.getLogger(__name__)
+
+# Exceptions that signal a bug in this library rather than a transient device or
+# transport problem. Best-effort poll/notification steps tolerate expected BLE
+# failures but must let these propagate — otherwise a refactor mistake (e.g. a
+# missing import or a renamed attribute) hides itself as silently stale state.
+_PROGRAMMING_ERRORS = (NameError, AttributeError, TypeError, ImportError)
 
 
 class BaseDevice(ABC):
@@ -109,6 +117,23 @@ class BaseDevice(ABC):
             "active_notifications": sorted(self._notification_handlers.keys()),
             "state": state_dump,
         }
+
+    @contextlib.contextmanager
+    def _tolerate(self, what: str) -> Iterator[None]:
+        """Run a best-effort poll/decode step, logging expected failures.
+
+        A single unreadable or garbled characteristic should not abort the whole
+        poll, so BLE transport and data-shape errors are logged and swallowed.
+        Programming errors (see ``_PROGRAMMING_ERRORS``) are re-raised so a
+        library bug surfaces in tests instead of silently leaving stale state.
+        The ``what`` string is folded into the log line: "Failed to <what>: ...".
+        """
+        try:
+            yield
+        except _PROGRAMMING_ERRORS:
+            raise
+        except Exception as e:
+            _LOGGER.warning("Failed to %s: %s", what, e)
 
     async def _read_characteristic(self, uuid: str) -> bytearray:
         """Read a characteristic value.
