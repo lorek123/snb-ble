@@ -6,8 +6,10 @@ from unittest.mock import AsyncMock
 from storzandbickel_ble.exceptions import ConnectionError
 from storzandbickel_ble.models import TemperatureUnit
 from storzandbickel_ble.protocol import (
+    VOLCANO_CHAR_AUTO_OFF,
     VOLCANO_CHAR_CURRENT_TEMP,
     VOLCANO_CHAR_HEATER_ON,
+    VOLCANO_CHAR_LED_BRIGHTNESS,
     VOLCANO_CHAR_STATUS_REGISTER_2,
     VOLCANO_CHAR_STATUS_REGISTER_3,
     VOLCANO_CHAR_TARGET_TEMP,
@@ -164,3 +166,59 @@ async def test_volcano_availability_transition_count(mock_bleak_client) -> None:
     await device.disconnect()
 
     assert device.availability_transition_count == 2
+
+
+@pytest.mark.asyncio
+async def test_volcano_set_led_brightness(mock_bleak_client) -> None:
+    """LED brightness writes encoded value and updates state."""
+    device = VolcanoDevice("AA:BB:CC:DD:EE:FF", client=mock_bleak_client)
+    device._connected = True
+    mock_bleak_client.is_connected = True
+
+    await device.set_led_brightness(7)
+
+    mock_bleak_client.write_gatt_char.assert_called_with(
+        VOLCANO_CHAR_LED_BRIGHTNESS,
+        encode_uint16(7),
+        response=False,
+    )
+    assert device.state.led_brightness == 7
+
+
+@pytest.mark.asyncio
+async def test_volcano_set_led_brightness_invalid(mock_bleak_client) -> None:
+    """Out-of-range brightness is rejected before any write."""
+    device = VolcanoDevice("AA:BB:CC:DD:EE:FF", client=mock_bleak_client)
+    device._connected = True
+    mock_bleak_client.is_connected = True
+
+    with pytest.raises(ValueError, match="between 1 and 9"):
+        await device.set_led_brightness(10)
+
+
+@pytest.mark.asyncio
+async def test_volcano_set_auto_off_time(mock_bleak_client) -> None:
+    """Auto-off time writes encoded seconds and updates state."""
+    device = VolcanoDevice("AA:BB:CC:DD:EE:FF", client=mock_bleak_client)
+    device._connected = True
+    mock_bleak_client.is_connected = True
+
+    await device.set_auto_off_time(1800)
+
+    mock_bleak_client.write_gatt_char.assert_called_with(
+        VOLCANO_CHAR_AUTO_OFF,
+        encode_uint16(1800),
+        response=False,
+    )
+    assert device.state.auto_off_time == 1800
+
+
+@pytest.mark.asyncio
+async def test_volcano_set_auto_off_time_negative_raises(mock_bleak_client) -> None:
+    """Negative auto-off time is rejected before any write."""
+    device = VolcanoDevice("AA:BB:CC:DD:EE:FF", client=mock_bleak_client)
+    device._connected = True
+    mock_bleak_client.is_connected = True
+
+    with pytest.raises(ValueError, match="Auto-off time must be >= 0"):
+        await device.set_auto_off_time(-5)

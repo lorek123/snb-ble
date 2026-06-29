@@ -17,12 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added explicit BLE operation exception types: `CharacteristicReadError`, `CharacteristicWriteError`, `NotificationSetupError`, and `CommandTimeoutError`.
 - Added availability transition tracking via `availability_transition_count` for deterministic up/down transition handling.
 - Added tests for diagnostics sanitization, availability transitions, and command timeout behavior.
+- Added tests covering the Venty (boost/superboost offset, ECO charge/voltage, boost visualization) and Volcano (LED brightness, auto-off) setters that the Home Assistant integration depends on.
 
 ### Changed
 - Decoded and wrote Crafty project status register 2 through shared helpers (`_apply_project_status2`, `_write_project_status2_bit`) so polling, notifications, and setters can't drift.
 - Serialized per-device BLE I/O operations in `BaseDevice` to reduce read/write overlap races.
 - Updated docs with supported-function matrix, data update model, concurrency contract, known limitations, and troubleshooting guidance.
-- Increased coverage quality gate from `45` to `55`.
+- Increased coverage quality gate to `58` (config previously lagged at `50`).
 
 ## [0.1.2] - 2025-12-30
 

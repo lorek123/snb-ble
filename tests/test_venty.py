@@ -164,3 +164,63 @@ async def test_venty_send_command_timeout_raises(mock_bleak_client) -> None:
 
     with pytest.raises(CommandTimeoutError):
         await device._send_command(0xFF, timeout=0.01)
+
+
+def _connected_venty(mock_bleak_client) -> VentyDevice:
+    device = VentyDevice("AA:BB:CC:DD:EE:FF", client=mock_bleak_client)
+    device._connected = True
+    mock_bleak_client.is_connected = True
+    return device
+
+
+@pytest.mark.asyncio
+async def test_venty_set_boost_offset(mock_bleak_client) -> None:
+    """Boost offset is written and reflected in state."""
+    device = _connected_venty(mock_bleak_client)
+    await device.set_boost_offset(15)
+    mock_bleak_client.write_gatt_char.assert_called()
+    assert device.state.boost_offset == 15
+
+
+@pytest.mark.asyncio
+async def test_venty_set_boost_offset_negative_raises(mock_bleak_client) -> None:
+    """Negative offsets are rejected before any write."""
+    device = _connected_venty(mock_bleak_client)
+    with pytest.raises(ValueError, match="Boost offset must be >= 0"):
+        await device.set_boost_offset(-1)
+
+
+@pytest.mark.asyncio
+async def test_venty_set_superboost_offset(mock_bleak_client) -> None:
+    """Superboost offset is written and reflected in state."""
+    device = _connected_venty(mock_bleak_client)
+    await device.set_superboost_offset(30)
+    mock_bleak_client.write_gatt_char.assert_called()
+    assert device.state.superboost_offset == 30
+
+
+@pytest.mark.asyncio
+async def test_venty_set_eco_mode_charge(mock_bleak_client) -> None:
+    """ECO charge-optimization toggles the state flag."""
+    device = _connected_venty(mock_bleak_client)
+    await device.set_eco_mode_charge(True)
+    mock_bleak_client.write_gatt_char.assert_called()
+    assert device.state.eco_mode_charge is True
+
+
+@pytest.mark.asyncio
+async def test_venty_set_eco_mode_voltage(mock_bleak_client) -> None:
+    """ECO charge-limit toggles the state flag."""
+    device = _connected_venty(mock_bleak_client)
+    await device.set_eco_mode_voltage(True)
+    mock_bleak_client.write_gatt_char.assert_called()
+    assert device.state.eco_mode_voltage is True
+
+
+@pytest.mark.asyncio
+async def test_venty_set_boost_visualization(mock_bleak_client) -> None:
+    """Boost visualization toggles the state flag."""
+    device = _connected_venty(mock_bleak_client)
+    await device.set_boost_visualization(True)
+    mock_bleak_client.write_gatt_char.assert_called()
+    assert device.state.boost_visualization is True
