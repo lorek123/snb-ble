@@ -8,9 +8,9 @@ A Python library for controlling Storz & Bickel vaporizers (Volcano Hybrid, Vent
 - **Async/Await**: Built with modern Python async/await patterns
 - **Type Safe**: Full type hints and Pydantic models for data validation
 - **Home Assistant Ready**: Follows Home Assistant best practices
-- **Controls**: Temperature/heater/pump, boost/superboost, and settings APIs
-- **Diagnostics**: Local `run_analysis()` helpers (no cloud upload)
-- **Workflows**: Volcano preset workflow execution (`balloon`, `flow1`, `flow2`, `flow3`)
+- **Controls**: temperature/heater/pump, boost/superboost, and a full settings surface — brightness, auto-off, vibration, ECO charging, display-on-cooling, Venty heater mode, and the Crafty charge-LED & permanent-Bluetooth toggles
+- **Diagnostics**: local `run_analysis()` returning a structured report — status, detected error flags, and raw registers (no cloud upload)
+- **Workflows**: Volcano presets (`balloon`, `flow1`–`flow3`) **and custom `run_workflow(steps)`** timed heat+pump sequences
 
 ## Installation
 
@@ -125,14 +125,27 @@ async def main():
     # Volcano workflow presets: balloon, flow1, flow2, flow3
     await volcano.run_workflow_preset("flow1")
 
-    # Local diagnostics summary (no cloud upload)
+    # ...or a custom workflow: a list of (target_temp, hold_seconds, pump_seconds)
+    await volcano.run_workflow([
+        (185.0, 10.0, 8.0),
+        (200.0, 0.0, 12.0),
+    ])
+
+    # Local diagnostics report (no cloud upload)
     report = await volcano.run_analysis()
     print(report["ok"], report["warnings"], report["errors"])
+    print(report["findings"])      # which error-mask bits are set, per register
+    print(report["diagnostics"])   # raw registers / history, as hex
 
     await volcano.disconnect()
 
 asyncio.run(main())
 ```
+
+Per-bit error *meanings* are decoded on Storz & Bickel's servers, not in the client, so
+`findings` reports **which** error bits are set; only locally-known cases (e.g. the Crafty
+akku charger/cable error) carry a `meaning`. The Venty/Veazy detailed analysis is a cloud-only
+blob, so their report returns the decoded settings/state plus a note rather than a full report.
 
 ## Device Support Matrix
 
@@ -153,8 +166,18 @@ asyncio.run(main())
 | Heater control | ✅ | ✅ | ✅ | ✅ |
 | Pump control | ✅ | ❌ | ❌ | ❌ |
 | Brightness and vibration settings | ✅ | ✅ | ✅ | ✅ |
+| Boost / superboost (offsets / modes) | ❌ | ✅ | ✅ | ✅ |
+| Heater mode (normal/boost/superboost) | ❌ | ✅ | ✅ | ❌ |
+| ECO charging (optimization / limit) | ❌ | ✅ | ✅ | ❌ |
+| Display-on-cooling / vibration-on-ready | ✅ | ❌ | ❌ | ❌ |
+| Charge-LED / permanent-Bluetooth | ❌ | ❌ | ❌ | ✅ |
+| Find device | ❌ | ✅ | ✅ | ✅ |
+| Charging / setpoint-reached state | ❌ | ✅ | ✅ | ✅* |
 | Local diagnostics (`run_analysis`) | ✅ | ✅ | ✅ | ✅ |
 | Workflow presets | ✅ | ❌ | ❌ | ❌ |
+| Custom workflows (`run_workflow`) | ✅ | ❌ | ❌ | ❌ |
+
+<sub>*Crafty exposes `setpoint_reached` but not a charging bit (it signals charging via its LED only).</sub>
 
 ## Data Update Model
 
@@ -182,7 +205,8 @@ Snapshot payloads intentionally omit serial numbers from `state` to reduce sensi
 
 - Firmware update workflows are not implemented in this library.
 - Vendor cloud upload paths are intentionally out of scope.
-- Some frontend-specific maintenance/analysis flows are not yet mirrored as first-class Python APIs.
+- Detailed device-error decoding is server-side at Storz & Bickel: `run_analysis()` reports **which** error bits are set plus raw registers, not the per-bit cause. The Venty/Veazy analysis blob is cloud-only.
+- The Venty/Veazy boost timeout is a fixed 90 s on/off setting (`set_boost_timeout_disabled`), not a configurable duration.
 - BLE behavior can vary by adapter, OS, and stack implementation.
 
 ## Troubleshooting
