@@ -1,12 +1,9 @@
 """Data models for Storz & Bickel BLE devices."""
 
 from enum import IntEnum
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-
-if TYPE_CHECKING:
-    pass
 
 
 class DeviceType(IntEnum):

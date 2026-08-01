@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING
 
 from bleak import BleakClient
 
@@ -17,10 +16,10 @@ from storzandbickel_ble.protocol import (
     VOLCANO_CHAR_FIRMWARE_VERSION,
     VOLCANO_CHAR_HEATER_OFF,
     VOLCANO_CHAR_HEATER_ON,
-    VOLCANO_CHAR_HISTORY_1,
-    VOLCANO_CHAR_HISTORY_2,
     VOLCANO_CHAR_HEATING_HOURS,
     VOLCANO_CHAR_HEATING_MINUTES,
+    VOLCANO_CHAR_HISTORY_1,
+    VOLCANO_CHAR_HISTORY_2,
     VOLCANO_CHAR_LED_BRIGHTNESS,
     VOLCANO_CHAR_PUMP_OFF,
     VOLCANO_CHAR_PUMP_ON,
@@ -45,9 +44,6 @@ from storzandbickel_ble.protocol import (
     encode_uint16,
     error_finding,
 )
-
-if TYPE_CHECKING:
-    pass
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -250,7 +246,7 @@ class VolcanoDevice(BaseDevice):
             # A library bug, not a device problem — surface it with its real type.
             raise
         except Exception as e:
-            _LOGGER.error("Error updating state: %s", e, exc_info=True)
+            _LOGGER.exception("Error updating state")
             raise InvalidDataError(f"Failed to update state: {e}") from e
 
     async def set_target_temperature(self, temperature: float) -> None:
@@ -477,7 +473,7 @@ class VolcanoDevice(BaseDevice):
         try:
             history_1 = (await self._read_characteristic(VOLCANO_CHAR_HISTORY_1)).hex()
             history_2 = (await self._read_characteristic(VOLCANO_CHAR_HISTORY_2)).hex()
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             _LOGGER.debug("History registers unavailable during analysis: %s", err)
 
         errors = [f"{f['source']} error flags set: {f['bits']}" for f in findings]

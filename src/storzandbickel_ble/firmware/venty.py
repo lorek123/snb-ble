@@ -7,7 +7,6 @@ Use at your own risk.
 import logging
 from typing import TYPE_CHECKING
 
-
 if TYPE_CHECKING:
     from storzandbickel_ble.venty import VentyDevice
 
@@ -21,7 +20,7 @@ class VentyFirmwareUpdater:
     Use at your own risk.
     """
 
-    def __init__(self, device: "VentyDevice") -> None:
+    def __init__(self, device: VentyDevice) -> None:
         """Initialize firmware updater.
 
         Args:

@@ -2,25 +2,24 @@
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING
 
 from bleak import BleakClient
 
 from storzandbickel_ble.device import _PROGRAMMING_ERRORS, BaseDevice
 from storzandbickel_ble.exceptions import CommandTimeoutError, InvalidDataError
 from storzandbickel_ble.models import (
+    DeviceType,
     HeaterMode,
     TemperatureUnit,
     VentyState,
-    DeviceType,
 )
 from storzandbickel_ble.protocol import (
     TEMP_MAX_VENTY,
     TEMP_MIN_VENTY,
     VENTY_CHAR_DEVICE_NAME,
     VENTY_CHAR_MAIN,
-    VENTY_CMD_FIND_DEVICE,
     VENTY_CMD_DEVICE_ANALYSIS,
+    VENTY_CMD_FIND_DEVICE,
     VENTY_CMD_FIRMWARE_VERSION,
     VENTY_CMD_SERIAL_NUMBER,
     VENTY_CMD_SETTINGS,
@@ -42,9 +41,6 @@ from storzandbickel_ble.protocol import (
     clamp_temperature,
     decode_string,
 )
-
-if TYPE_CHECKING:
-    pass
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -173,7 +169,7 @@ class VentyDevice(BaseDevice):
             # A library bug, not a device problem — surface it with its real type.
             raise
         except Exception as e:
-            _LOGGER.error("Error updating state: %s", e, exc_info=True)
+            _LOGGER.exception("Error updating state")
             raise InvalidDataError(f"Failed to update state: {e}") from e
 
     async def _send_command(
@@ -207,7 +203,7 @@ class VentyDevice(BaseDevice):
         try:
             await asyncio.wait_for(self._response_event.wait(), timeout=timeout)
             return self._response_data
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             msg = f"Command response timeout for command 0x{cmd:02X}"
             raise CommandTimeoutError(msg) from e
 

@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING
 
 from bleak import BleakClient
 
@@ -14,8 +13,6 @@ from storzandbickel_ble.protocol import (
     CRAFTY_CHAR_AKKU_STATUS,
     CRAFTY_CHAR_AUTO_OFF,
     CRAFTY_CHAR_BATTERY,
-    CRAFTY_CHAR_SICHERHEITSCODE,
-    CRAFTY_SICHERHEITSCODE,
     CRAFTY_CHAR_BLE_VERSION,
     CRAFTY_CHAR_BOOST_TEMP,
     CRAFTY_CHAR_CURRENT_TEMP,
@@ -24,6 +21,7 @@ from storzandbickel_ble.protocol import (
     CRAFTY_CHAR_LED_BRIGHTNESS,
     CRAFTY_CHAR_PROJECT_STATUS,
     CRAFTY_CHAR_PROJECT_STATUS_2,
+    CRAFTY_CHAR_SICHERHEITSCODE,
     CRAFTY_CHAR_STATUS_REGISTER,
     CRAFTY_CHAR_TARGET_TEMP,
     CRAFTY_CHAR_USAGE_HOURS,
@@ -37,6 +35,7 @@ from storzandbickel_ble.protocol import (
     CRAFTY_PROJECT_STATUS_BOOST_ENABLED,
     CRAFTY_PROJECT_STATUS_ERROR_BITS,
     CRAFTY_PROJECT_STATUS_SUPERBOOST_ENABLED,
+    CRAFTY_SICHERHEITSCODE,
     CRAFTY_STATUS_BOOST_MODE,
     CRAFTY_STATUS_FAHRENHEIT,
     CRAFTY_STATUS_HEATER_ON,
@@ -51,9 +50,6 @@ from storzandbickel_ble.protocol import (
     encode_uint16,
     error_finding,
 )
-
-if TYPE_CHECKING:
-    pass
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -267,8 +263,8 @@ class CraftyDevice(BaseDevice):
                 return_exceptions=True,
             )
 
-        except Exception as e:
-            _LOGGER.error("Error reading minimal state: %s", e, exc_info=True)
+        except Exception:
+            _LOGGER.exception("Error reading minimal state")
 
     async def update_state(self) -> None:
         """Update device state by reading from device."""
@@ -367,7 +363,7 @@ class CraftyDevice(BaseDevice):
             # A library bug, not a device problem — surface it with its real type.
             raise
         except Exception as e:
-            _LOGGER.error("Error updating state: %s", e, exc_info=True)
+            _LOGGER.exception("Error updating state")
             raise InvalidDataError(f"Failed to update state: {e}") from e
 
     async def set_target_temperature(self, temperature: float) -> None:
@@ -593,7 +589,7 @@ class CraftyDevice(BaseDevice):
             akku = decode_uint16(
                 await self._read_characteristic(CRAFTY_CHAR_AKKU_STATUS)
             )
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             _LOGGER.debug("Akku status register unavailable during analysis: %s", err)
 
         findings: list[dict[str, object]] = []

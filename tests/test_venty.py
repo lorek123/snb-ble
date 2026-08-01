@@ -1,7 +1,8 @@
 """Tests for Venty device."""
 
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
 
 from storzandbickel_ble.exceptions import CommandTimeoutError
 from storzandbickel_ble.models import HeaterMode

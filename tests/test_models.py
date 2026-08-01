@@ -1,6 +1,7 @@
 """Tests for data models."""
 
 import pytest
+from pydantic import ValidationError
 
 from storzandbickel_ble.models import (
     CraftyState,
@@ -55,7 +56,7 @@ def test_volcano_state_temperature_validation() -> None:
     assert state.current_temperature == 185.0
 
     # Temperature out of range should be clamped by Pydantic
-    with pytest.raises(Exception):  # Pydantic validation error
+    with pytest.raises(ValidationError):
         VolcanoState(current_temperature=300.0)
 
 

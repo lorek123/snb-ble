@@ -1,7 +1,8 @@
 """Tests for Crafty device."""
 
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
 
 from storzandbickel_ble.crafty import CraftyDevice
 from storzandbickel_ble.protocol import (
@@ -230,9 +231,8 @@ def test_tolerate_swallows_expected_but_reraises_bugs() -> None:
         raise ValueError("garbled payload")
 
     # Programming errors propagate so a refactor mistake surfaces.
-    with pytest.raises(AttributeError):
-        with device._tolerate("read something"):
-            raise AttributeError("renamed field")
+    with pytest.raises(AttributeError), device._tolerate("read something"):
+        raise AttributeError("renamed field")
 
 
 @pytest.mark.asyncio

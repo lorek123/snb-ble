@@ -49,7 +49,7 @@ class BaseDevice(ABC):
         self._client = client
         self.name = name
         self._state: DeviceState | None = None
-        self._notification_handlers: dict[str, "Callable[[bytes], None]"] = {}
+        self._notification_handlers: dict[str, Callable[[bytes], None]] = {}
         self._connected = False
         self._io_lock = asyncio.Lock()
         self._availability_transition_count = 0
@@ -191,7 +191,7 @@ class BaseDevice(ABC):
     async def _start_notifications(
         self,
         uuid: str,
-        handler: "Callable[[bytes], None]",
+        handler: Callable[[bytes], None],
     ) -> None:
         """Start notifications for a characteristic.
 
@@ -221,7 +221,12 @@ class BaseDevice(ABC):
                 )
                 return
         except Exception:
-            pass  # Services not yet discovered or other transient error — let start_notify handle it
+            # Services not yet discovered or other transient error — let start_notify handle it.
+            _LOGGER.debug(
+                "Could not inspect properties of characteristic %s; subscribing anyway",
+                uuid,
+                exc_info=True,
+            )
 
         def bleak_handler(
             characteristic: BleakGATTCharacteristic,
