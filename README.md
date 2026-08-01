@@ -34,30 +34,32 @@ uv pip install storzandbickel-ble
 import asyncio
 from storzandbickel_ble import StorzBickelClient
 
+
 async def main():
     # Create client
     client = StorzBickelClient()
-    
+
     # Scan for devices
     devices = await client.scan(timeout=10.0)
     print(f"Found {len(devices)} devices")
-    
+
     # Connect to first device
     if devices:
         device = await client.connect_device(devices[0])
-        
+
         # Set target temperature
         await device.set_target_temperature(185.0)
-        
+
         # Turn heater on
         await device.turn_heater_on()
-        
+
         # Read current state
         print(f"Current temperature: {device.state.current_temperature}°C")
         print(f"Target temperature: {device.state.target_temperature}°C")
-        
+
         # Disconnect
         await device.disconnect()
+
 
 asyncio.run(main())
 ```
@@ -80,32 +82,34 @@ import asyncio
 from storzandbickel_ble import StorzBickelClient
 from storzandbickel_ble.models import DeviceType
 
+
 async def main():
     client = StorzBickelClient()
-    
+
     # Scan for Crafty devices
     devices = await client.scan(timeout=10.0, device_type=DeviceType.CRAFTY)
-    
+
     if devices:
         # Connect to first Crafty device
         crafty = await client.connect_device(devices[0])
-        
+
         # Update state to get current values
         await crafty.update_state()
-        
+
         # Check temperatures
         print(f"Current temperature: {crafty.state.current_temperature}°C")
         print(f"Target temperature: {crafty.state.target_temperature}°C")
-        
+
         # Set target temperature
         await crafty.set_target_temperature(185.0)
         print(f"Set target temperature to 185°C")
-        
+
         # Verify the change
         await crafty.update_state()
         print(f"New target temperature: {crafty.state.target_temperature}°C")
-        
+
         await crafty.disconnect()
+
 
 asyncio.run(main())
 ```
@@ -118,6 +122,7 @@ For additional per-device examples (Venty, Veazy, Volcano), see `docs/usage.rst`
 import asyncio
 from storzandbickel_ble import StorzBickelClient
 
+
 async def main():
     client = StorzBickelClient()
     volcano = await client.connect_by_name("S&B VOLCANO")
@@ -126,18 +131,21 @@ async def main():
     await volcano.run_workflow_preset("flow1")
 
     # ...or a custom workflow: a list of (target_temp, hold_seconds, pump_seconds)
-    await volcano.run_workflow([
-        (185.0, 10.0, 8.0),
-        (200.0, 0.0, 12.0),
-    ])
+    await volcano.run_workflow(
+        [
+            (185.0, 10.0, 8.0),
+            (200.0, 0.0, 12.0),
+        ]
+    )
 
     # Local diagnostics report (no cloud upload)
     report = await volcano.run_analysis()
     print(report["ok"], report["warnings"], report["errors"])
-    print(report["findings"])      # which error-mask bits are set, per register
-    print(report["diagnostics"])   # raw registers / history, as hex
+    print(report["findings"])  # which error-mask bits are set, per register
+    print(report["diagnostics"])  # raw registers / history, as hex
 
     await volcano.disconnect()
+
 
 asyncio.run(main())
 ```

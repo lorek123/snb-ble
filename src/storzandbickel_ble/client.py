@@ -1,8 +1,8 @@
 """Main BLE client for Storz & Bickel devices."""
 
 import asyncio
+import builtins
 import logging
-from typing import TYPE_CHECKING
 
 from bleak import BleakClient, BleakScanner
 
@@ -22,9 +22,6 @@ from storzandbickel_ble.protocol import (
     DEVICE_NAME_VENTY_SHORT,
     DEVICE_NAME_VOLCANO,
 )
-
-if TYPE_CHECKING:
-    pass
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -184,8 +181,8 @@ class StorzBickelClient:
                     detected_type.name,
                 )
 
-        except Exception as e:
-            _LOGGER.error("Error during scan: %s", e, exc_info=True)
+        except Exception:
+            _LOGGER.exception("Error during scan")
 
         _LOGGER.debug("Scan complete, found %d devices", len(devices))
         return devices
@@ -347,8 +344,8 @@ class StorzBickelClient:
                             try:
                                 from storzandbickel_ble.protocol import (
                                     VENTY_CHAR_DEVICE_NAME,
+                                    decode_string,
                                 )
-                                from storzandbickel_ble.protocol import decode_string
 
                                 name_data = await client.read_gatt_char(
                                     VENTY_CHAR_DEVICE_NAME
@@ -469,10 +466,10 @@ class StorzBickelClient:
 
             return device
 
-        except asyncio.TimeoutError as e:
+        except builtins.TimeoutError as e:
             msg = f"Connection timeout after {timeout}s"
             raise TimeoutError(msg) from e
-        except (DeviceNotFoundError, TimeoutError):
+        except DeviceNotFoundError, TimeoutError:
             raise
         except Exception as e:
             msg = f"Failed to connect: {e}"

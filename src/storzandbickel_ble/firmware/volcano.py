@@ -5,6 +5,7 @@ Use at your own risk.
 """
 
 import asyncio
+import builtins
 import logging
 from typing import TYPE_CHECKING
 
@@ -39,7 +40,7 @@ class VolcanoFirmwareUpdater:
     OPERATION_TIMEOUT = 1.5  # seconds
     MAX_RETRIES = 6
 
-    def __init__(self, device: "VolcanoDevice") -> None:
+    def __init__(self, device: VolcanoDevice) -> None:
         """Initialize firmware updater.
 
         Args:
@@ -131,7 +132,7 @@ class VolcanoFirmwareUpdater:
             _LOGGER.debug("Received response: %s", response)
             return response
 
-        except asyncio.TimeoutError as e:
+        except builtins.TimeoutError as e:
             msg = f"Operation timeout: {command}"
             raise TimeoutError(msg) from e
         except Exception as e:

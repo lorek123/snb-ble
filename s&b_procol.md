@@ -203,8 +203,8 @@ Temperatures are encoded as 16-bit little-endian integers representing temperatu
 temp_celsius = 185.0
 temp_raw = int(temp_celsius * 10)  # 1850
 data = [
-    temp_raw & 0xFF,        # Low byte:  0x3A
-    (temp_raw >> 8) & 0xFF  # High byte: 0x07
+    temp_raw & 0xFF,  # Low byte:  0x3A
+    (temp_raw >> 8) & 0xFF,  # High byte: 0x07
 ]
 # Result: [0x3A, 0x07]
 ```
@@ -214,7 +214,7 @@ data = [
 # Convert device format to Celsius
 data = [0x3A, 0x07]
 temp_raw = data[0] | (data[1] << 8)  # 1850
-temp_celsius = temp_raw / 10.0       # 185.0
+temp_celsius = temp_raw / 10.0  # 185.0
 ```
 
 **Temperature Ranges:**
@@ -276,7 +276,7 @@ Firmware version and serial number are UTF-8 strings. Remove null terminators wh
 ```python
 # Example: Firmware version
 data = [0x56, 0x31, 0x2E, 0x30, 0x2E, 0x30, 0x00]  # "V1.0.0\0"
-firmware = bytes(data).decode('utf-8').rstrip('\0')  # "V1.0.0"
+firmware = bytes(data).decode("utf-8").rstrip("\0")  # "V1.0.0"
 ```
 
 ## Status Registers
@@ -683,10 +683,10 @@ def generate_telegram(command_bytes, data_len):
     buffer = bytearray(6 + len(command_bytes))
     buffer[0:3] = [0xFE, 0xFA, 0x7F]
     buffer[3] = 6 + data_len
-    buffer[4:4+len(command_bytes)] = command_bytes
-    buffer[4+len(command_bytes)] = 0x00
-    buffer[5+len(command_bytes)] = 0xFD
-    buffer[4+len(command_bytes)] = calc_checksum(buffer)  # Checksum before 0xFD
+    buffer[4 : 4 + len(command_bytes)] = command_bytes
+    buffer[4 + len(command_bytes)] = 0x00
+    buffer[5 + len(command_bytes)] = 0xFD
+    buffer[4 + len(command_bytes)] = calc_checksum(buffer)  # Checksum before 0xFD
     return bytes(buffer)
 ```
 
@@ -836,15 +836,18 @@ CHAR_TARGET_TEMP = "10110003-5354-4f52-5a26-4249434b454c"
 CHAR_CURRENT_TEMP = "10110001-5354-4f52-5a26-4249434b454c"
 CHAR_HEATER_ON = "1011000f-5354-4f52-5a26-4249434b454c"
 
+
 def encode_temperature(temp_celsius):
     """Encode temperature as 2-byte little-endian (temp × 10)"""
     temp_raw = int(temp_celsius * 10)
     return bytes([temp_raw & 0xFF, (temp_raw >> 8) & 0xFF])
 
+
 def decode_temperature(data):
     """Decode temperature from 2-byte little-endian"""
     temp_raw = data[0] | (data[1] << 8)
     return temp_raw / 10.0
+
 
 async def control_volcano():
     # Scan for device
@@ -874,10 +877,12 @@ async def control_volcano():
         # Keep connection alive
         await asyncio.sleep(60)
 
+
 def notification_handler(sender, data):
     """Handle notification data"""
     temp = decode_temperature(data)
     print(f"Temperature update: {temp}°C")
+
 
 asyncio.run(control_volcano())
 ```

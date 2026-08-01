@@ -1,7 +1,8 @@
 """Tests for BLE client."""
 
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from storzandbickel_ble.client import StorzBickelClient
 from storzandbickel_ble.exceptions import DeviceNotFoundError
@@ -123,10 +124,12 @@ async def test_connect_device_redetects_generic_sb_name(mock_bleak_client) -> No
     mock_bleak_client.is_connected = True
 
     client = StorzBickelClient()
-    with patch("storzandbickel_ble.client.BleakClient", return_value=mock_bleak_client):
-        with patch.object(mock_bleak_client, "connect", new_callable=AsyncMock):
-            # Patch VentyDevice.connect so we don't actually do BLE I/O
-            with patch.object(VentyDevice, "connect", new_callable=AsyncMock):
-                device = await client.connect_device(device_info)
+    with (
+        patch("storzandbickel_ble.client.BleakClient", return_value=mock_bleak_client),
+        patch.object(mock_bleak_client, "connect", new_callable=AsyncMock),
+        # Patch VentyDevice.connect so we don't actually do BLE I/O
+        patch.object(VentyDevice, "connect", new_callable=AsyncMock),
+    ):
+        device = await client.connect_device(device_info)
 
     assert isinstance(device, VentyDevice)

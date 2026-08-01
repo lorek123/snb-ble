@@ -146,8 +146,8 @@ async def main() -> None:
         if crafty_device and crafty_device.is_connected:
             await crafty_device.disconnect()
         sys.exit(0)
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}", exc_info=True)
+    except Exception:
+        logger.exception("Unexpected error")
         if crafty_device and crafty_device.is_connected:
             await crafty_device.disconnect()
         sys.exit(1)

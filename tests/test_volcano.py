@@ -1,7 +1,8 @@
 """Tests for Volcano device."""
 
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
 
 from storzandbickel_ble.exceptions import ConnectionError
 from storzandbickel_ble.models import TemperatureUnit

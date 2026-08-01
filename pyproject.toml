@@ -56,50 +56,14 @@ include = [
 [tool.ruff]
 line-length = 88
 target-version = "py314"
-select = [
-    "E",    # pycodestyle errors
-    "W",    # pycodestyle warnings
-    "F",    # pyflakes
-    "I",    # isort
-    "N",    # pep8-naming
-    "UP",   # pyupgrade
-    "B",    # flake8-bugbear
-    "A",    # flake8-builtins
-    "C4",   # flake8-comprehensions
-    "DTZ",  # flake8-datetimez
-    "T10",  # flake8-debugger
-    "EM",   # flake8-errmsg
-    "PIE",  # flake8-pie
-    "PT",   # flake8-pytest-style
-    "RET",  # flake8-return
-    "SIM",  # flake8-simplify
-    "TID",  # flake8-tidy-imports
-    "ARG",  # flake8-unused-arguments
-    "PTH",  # flake8-use-pathlib
-    "ERA",  # eradicate
-    "PD",   # pandas-vet
-    "PGH",  # pygrep-hooks
-    "PL",   # pylint
-    "PLR",  # pylint refactor
-    "PLW",  # pylint warnings
-    "Q",    # flake8-quotes
-    "RSE",  # flake8-raise
-    "RUF",  # ruff-specific rules
-    "S",    # flake8-bandit
-    "SLF",  # flake8-self
-    "SLOT", # flake8-slots
-    "T",    # flake8-gettext
-    "T20",  # flake8-print
-    "TC",   # flake8-type-checking
-    "UP",   # pyupgrade
-    "W",    # pycodestyle warnings
-    "YTT",  # flake8-2020
-]
+
+[tool.ruff.lint]
 ignore = [
-    "PLR0913",  # Too many arguments
-    "PLR2004",  # Magic value used in comparison
-    "S101",     # Use of assert
-    "T201",     # Print statements (for debugging)
+    # This library deliberately swallows broad exceptions around GATT operations:
+    # BLE links drop constantly and a failed read must degrade to stale state
+    # rather than propagate. Downstream consumers (the ha-snb coordinator) are
+    # built on that contract, so these catches must not be narrowed.
+    "BLE001",  # Do not catch blind exception
 ]
 
 [tool.ruff.format]
