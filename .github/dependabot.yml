@@ -1,16 +1,35 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
 # https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
-
+#
+# Grouping is what keeps this repo's backlog from re-forming. Every uv update
+# rewrites uv.lock, so ungrouped PRs conflict with each other the moment more
+# than one is open — which is exactly how 8 PRs piled up through mid-2026.
+# A group makes Dependabot resolve all its members in a single pass and emit
+# ONE PR with ONE lock update, and it rebases itself when main moves.
 version: 2
 updates:
-  - package-ecosystem: "uv" # See documentation for possible values
-    directory: "/" # Location of package manifests
+  - package-ecosystem: "uv"
+    directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      python-deps:
+        patterns:
+          - "*"
+        # The BLE stack must track what Home Assistant pins, because this library
+        # is installed inside HA by the ha-snb integration — a floor above HA's pin
+        # breaks pip resolution for users. Those bumps need a human to check
+        # homeassistant/package_constraints.txt and then cut a release, so keep
+        # them out of the batch.
+        exclude-patterns:
+          - "bleak"
+          - "bleak-retry-connector"
+          - "pydantic"
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
