@@ -264,3 +264,76 @@ def test_crafty_notification_surfaces_programming_error() -> None:
 
     with pytest.raises(AttributeError, match="renamed field"):
         device._handle_project_status2_notification(bytes([0x00, 0x00]))
+
+
+# Register values captured from a Crafty+ (FW V04.26) over BLE:
+# (power 0x83, akku 0x63, akku2 0x73) -> (charger_connected, charging, full)
+_CHARGE_CASES = [
+    pytest.param(0x2404, 0x0000, 0x0000, False, False, False, id="unplugged"),
+    pytest.param(0x2405, 0x8084, 0x2000, True, True, False, id="charging"),
+    pytest.param(0x2405, 0x80D4, 0x2000, True, False, True, id="full-led-solid"),
+]
+
+
+@pytest.mark.parametrize(
+    ("power", "akku", "akku2", "connected", "charging", "full"), _CHARGE_CASES
+)
+def test_crafty_charge_state_from_captured_registers(
+    power, akku, akku2, connected, charging, full
+) -> None:
+    device = CraftyDevice("AA:BB:CC:DD:EE:FF")
+    state = device.state
+    state.power_status_register = power
+    state.akku_status_register = akku
+    state.akku_status_register_2 = akku2
+
+    CraftyDevice._apply_charge_state(state)
+
+    assert state.charger_connected is connected
+    assert state.charging is charging
+    assert state.battery_full is full
+
+
+@pytest.mark.asyncio
+async def test_crafty_update_state_reads_charge_registers(mock_bleak_client) -> None:
+    """update_state reads 0x83/0x63/0x73 and derives the charge state."""
+    from storzandbickel_ble.protocol import (
+        CRAFTY_CHAR_AKKU_STATUS,
+        CRAFTY_CHAR_AKKU_STATUS_1,
+        CRAFTY_CHAR_POWER_STATUS,
+    )
+
+    values = {
+        CRAFTY_CHAR_POWER_STATUS: encode_uint16(0x2405),
+        CRAFTY_CHAR_AKKU_STATUS_1: encode_uint16(0x8084),
+        CRAFTY_CHAR_AKKU_STATUS: encode_uint16(0x2000),
+    }
+
+    async def read(uuid, *args, **kwargs):
+        return values.get(uuid, bytes([0x3A, 0x07]))
+
+    mock_bleak_client.read_gatt_char = AsyncMock(side_effect=read)
+    device = CraftyDevice("AA:BB:CC:DD:EE:FF", client=mock_bleak_client)
+    device._connected = True
+    mock_bleak_client.is_connected = True
+
+    await device.update_state()
+
+    assert device.state.charger_connected is True
+    assert device.state.charging is True
+    assert device.state.battery_full is False
+
+
+def test_crafty_akku_status_1_notification_updates_charge_state() -> None:
+    """A 0x63 notification flips charging -> full without a poll."""
+    device = CraftyDevice("AA:BB:CC:DD:EE:FF")
+    state = device.state
+    state.power_status_register = 0x2405
+    state.akku_status_register_2 = 0x2000
+
+    device._handle_akku_status_1_notification(encode_uint16(0x8084))
+    assert state.charging is True
+
+    device._handle_akku_status_1_notification(encode_uint16(0x80D4))
+    assert state.charging is False
+    assert state.battery_full is True

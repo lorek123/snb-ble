@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Crafty/Crafty+: charge state. `CraftyState.charger_connected` (char `0x83` bit 0, or akkuStatusReg2 `0x73` bit 13), `battery_full` (akkuStatusReg `0x63` bits 4+6, the point the device LED goes solid) and `charging` (connected and not full). The raw `power_status_register`, `akku_status_register` and `akku_status_register_2` are exposed too. `0x63` is subscribed for notifications so charging -> full updates without a poll. Bits were determined on a Crafty+ (FW V04.26) by unplugging/replugging the charger and charging to 100 %; the web app does not decode them.
+
 ## [0.1.23] - 2026-11-10
 
 ### Fixed

@@ -155,7 +155,13 @@ CRAFTY_CHAR_BLE_VERSION = "00000072-4c45-4b43-4942-265a524f5453"
 CRAFTY_CHAR_HEATER_ON = "00000081-4c45-4b43-4942-265a524f5453"
 CRAFTY_CHAR_HEATER_OFF = "00000091-4c45-4b43-4942-265a524f5453"
 CRAFTY_CHAR_BOOST_TEMP = "00000031-4c45-4b43-4942-265a524f5453"  # in Service 1
-CRAFTY_CHAR_AKKU_STATUS = "00000073-4c45-4b43-4942-265a524f5453"
+CRAFTY_CHAR_AKKU_STATUS = (
+    "00000073-4c45-4b43-4942-265a524f5453"  # akkuStatusReg2 (read)
+)
+CRAFTY_CHAR_AKKU_STATUS_1 = (
+    "00000063-4c45-4b43-4942-265a524f5453"  # akkuStatusReg (read/notify)
+)
+CRAFTY_CHAR_POWER_STATUS = "00000083-4c45-4b43-4942-265a524f5453"  # read
 CRAFTY_CHAR_USAGE_HOURS = "00000023-4c45-4b43-4942-265a524f5453"
 CRAFTY_CHAR_USAGE_MINUTES = "000001e3-4c45-4b43-4942-265a524f5453"
 CRAFTY_CHAR_PROJECT_STATUS = "00000093-4c45-4b43-4942-265a524f5453"
@@ -193,6 +199,12 @@ CRAFTY_PROJECT_STATUS2_FIND_DEVICE = 0x0008  # Bit 3 — auto-clears after 30 s
 
 # Crafty diagnostics: error-bit masks (per-bit meaning is decoded server-side).
 CRAFTY_PROJECT_STATUS_ERROR_BITS = 0x2008  # error/fault flags in project status reg 1
+# Crafty charge state. Determined on a Crafty+ (FW V04.26) by unplugging/replugging
+# the charger and charging to full; the web app does not decode these.
+CRAFTY_POWER_CHARGER_CONNECTED = 0x0001  # char 0x83 bit 0 — set instantly on plug-in
+CRAFTY_AKKU_BATTERY_FULL = 0x0050  # akkuStatusReg (0x63) bits 4+6 — LED goes solid
+CRAFTY_AKKU2_CHARGER_SUPPLYING = 0x2000  # akkuStatusReg2 (0x73) bit 13 — incl. top-off
+
 CRAFTY_AKKU_ERROR = (
     0x8000  # akkuStatusReg2 bit 15 — charger/cable error (known locally)
 )
