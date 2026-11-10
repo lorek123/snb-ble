@@ -10,8 +10,11 @@ from storzandbickel_ble.device import _PROGRAMMING_ERRORS, BaseDevice
 from storzandbickel_ble.exceptions import InvalidDataError
 from storzandbickel_ble.models import CraftyState, DeviceType
 from storzandbickel_ble.protocol import (
+    CRAFTY_AKKU2_CHARGER_SUPPLYING,
+    CRAFTY_AKKU_BATTERY_FULL,
     CRAFTY_AKKU_ERROR,
     CRAFTY_CHAR_AKKU_STATUS,
+    CRAFTY_CHAR_AKKU_STATUS_1,
     CRAFTY_CHAR_AUTO_OFF,
     CRAFTY_CHAR_BATTERY,
     CRAFTY_CHAR_BLE_VERSION,
@@ -20,6 +23,7 @@ from storzandbickel_ble.protocol import (
     CRAFTY_CHAR_HEATER_OFF,
     CRAFTY_CHAR_HEATER_ON,
     CRAFTY_CHAR_LED_BRIGHTNESS,
+    CRAFTY_CHAR_POWER_STATUS,
     CRAFTY_CHAR_PROJECT_STATUS,
     CRAFTY_CHAR_PROJECT_STATUS_2,
     CRAFTY_CHAR_SICHERHEITSCODE,
@@ -27,6 +31,7 @@ from storzandbickel_ble.protocol import (
     CRAFTY_CHAR_TARGET_TEMP,
     CRAFTY_CHAR_USAGE_HOURS,
     CRAFTY_CHAR_USAGE_MINUTES,
+    CRAFTY_POWER_CHARGER_CONNECTED,
     CRAFTY_PROJECT_STATUS2_AUTO_BLE_SHUTDOWN,
     CRAFTY_PROJECT_STATUS2_CHARGE_LED_DISABLED,
     CRAFTY_PROJECT_STATUS2_FIND_DEVICE,
@@ -125,6 +130,27 @@ class CraftyDevice(BaseDevice):
         )
         state.setpoint_reached = bool(value & CRAFTY_PROJECT_STATUS2_TEMP_REACHED)
 
+    @staticmethod
+    def _apply_charge_state(state: CraftyState) -> None:
+        """Derive charger/charging/full from the cached akku and power registers.
+
+        The charger counts as connected if either the power register (0x83) or
+        akkuStatusReg2 (0x73) says so; "charging" means connected and not yet full,
+        which matches the device LED (blinking while charging, solid when full).
+        """
+        connected = bool(
+            state.power_status_register & CRAFTY_POWER_CHARGER_CONNECTED
+            or state.akku_status_register_2 & CRAFTY_AKKU2_CHARGER_SUPPLYING
+        )
+        full = (
+            connected
+            and (state.akku_status_register & CRAFTY_AKKU_BATTERY_FULL)
+            == CRAFTY_AKKU_BATTERY_FULL
+        )
+        state.charger_connected = connected
+        state.battery_full = full
+        state.charging = connected and not full
+
     async def connect(self) -> None:
         """Connect to device and initialize."""
         if self._client is None:
@@ -189,6 +215,14 @@ class CraftyDevice(BaseDevice):
             )
         except Exception as e:
             _LOGGER.warning("Failed to enable notifications for Akku status: %s", e)
+
+        try:
+            await self._start_notifications(
+                CRAFTY_CHAR_AKKU_STATUS_1,
+                self._handle_akku_status_1_notification,
+            )
+        except Exception as e:
+            _LOGGER.warning("Failed to enable notifications for Akku status 1: %s", e)
 
     async def disconnect(self) -> None:
         """Disconnect from device."""
@@ -339,6 +373,18 @@ class CraftyDevice(BaseDevice):
             with self._tolerate("read boost temperature"):
                 data = await self._read_characteristic(CRAFTY_CHAR_BOOST_TEMP)
                 state.boost_temperature = decode_temperature(data)
+
+            # Read charge state (power status + both akku status registers)
+            with self._tolerate("read power status"):
+                data = await self._read_characteristic(CRAFTY_CHAR_POWER_STATUS)
+                state.power_status_register = decode_uint16(data)
+            with self._tolerate("read akku status 1"):
+                data = await self._read_characteristic(CRAFTY_CHAR_AKKU_STATUS_1)
+                state.akku_status_register = decode_uint16(data)
+            with self._tolerate("read akku status 2"):
+                data = await self._read_characteristic(CRAFTY_CHAR_AKKU_STATUS)
+                state.akku_status_register_2 = decode_uint16(data)
+            self._apply_charge_state(state)
 
             # Read LED brightness
             with self._tolerate("read LED brightness"):
@@ -704,6 +750,13 @@ class CraftyDevice(BaseDevice):
         state = self._get_state()
         with self._tolerate("handle project status register 2 notification"):
             self._apply_project_status2(state, decode_uint16(bytearray(data)))
+
+    def _handle_akku_status_1_notification(self, data: bytes) -> None:
+        """Handle akkuStatusReg (0x63) notification: refresh charge state."""
+        state = self._get_state()
+        with self._tolerate("handle Akku status 1 notification"):
+            state.akku_status_register = decode_uint16(bytearray(data))
+            self._apply_charge_state(state)
 
     def _handle_akku_status_notification(self, data: bytes) -> None:
         """Handle Akku status notification (akkuStatusReg2 — error diagnostics only)."""
