@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Venty/Veazy: the current-temperature bytes of the `0x01` status packet are `0x8000` ("not reported") on real devices, idle and heating (FW V01.11), and the vendor app hides the current temperature for these models. This is now handled explicitly as `None` instead of relying on the range check (the old "~3276 °C" reading in ha-snb#8).
+
 ## [0.1.24] - 2026-11-10
 
 ### Added

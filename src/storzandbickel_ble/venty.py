@@ -41,6 +41,7 @@ from storzandbickel_ble.protocol import (
     VENTY_SETTINGS06_MASK_BOOST_TIMEOUT,
     VENTY_SETTINGS06_MASK_BRIGHTNESS,
     VENTY_SETTINGS06_MASK_VIBRATION,
+    VENTY_TEMP_NOT_REPORTED,
     build_venty_command,
     clamp_temperature,
     decode_string,
@@ -530,11 +531,15 @@ class VentyDevice(BaseDevice):
                 settings = data_array[14] if len(data_array) > 14 else 0
 
                 current_temp = current_temp_raw / 10.0
-                # Use a wide physical range so the sensor shows while the device
-                # is cold or cooling — TEMP_MIN_VENTY (40°C) is the minimum
-                # *settable* temperature, not the minimum measurable temperature.
+                # 0x8000 means "not reported" (the Venty/Veazy never send a live
+                # temperature). Otherwise use a wide physical range so the value
+                # shows while cold or cooling — TEMP_MIN_VENTY (40°C) is the minimum
+                # *settable* temperature, not the minimum measurable one.
                 state.current_temperature = (
-                    current_temp if 0 < current_temp <= 250.0 else None
+                    current_temp
+                    if current_temp_raw != VENTY_TEMP_NOT_REPORTED
+                    and 0 < current_temp <= 250.0
+                    else None
                 )
                 target_temp = target_temp_raw / 10.0
                 state.target_temperature = (
