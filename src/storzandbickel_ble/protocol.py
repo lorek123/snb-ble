@@ -99,6 +99,14 @@ VENTY_CMD_USAGE_STATS = 0x04
 VENTY_CMD_SERIAL_NUMBER = 0x05
 VENTY_CMD_SETTINGS = 0x06
 VENTY_CMD_FIND_DEVICE = 0x13
+VENTY_CMD_INIT = 0x1D  # sent by the vendor app right after 0x02 on connect
+# On application firmware the vendor app requests the connection interval /
+# periodic status with cmd 0x30, byte 1 = 0x06. Do NOT send this as cmd 0x01:
+# byte 1 of a 0x01 packet is the write mask (0x02 = target temp, 0x04 = boost).
+VENTY_CMD_APP_STATUS = 0x30
+VENTY_APP_STATUS_SUBCMD_CONNECTION_INTERVAL = 0x06
+# Byte 1 of the 0x02 (firmware version) response: bit 0 = application firmware.
+VENTY_FIRMWARE_FLAG_APPLICATION = 0x01
 VENTY_CMD_BOOTLOADER = 0x30
 VENTY_CMD_BOOTLOADER_ALT = 0x48
 
