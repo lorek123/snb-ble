@@ -250,3 +250,63 @@ def test_venty_main_notification_surfaces_bug_and_releases_waiter(monkeypatch) -
     with pytest.raises(AttributeError, match="renamed enum"):
         device._handle_main_notification(bytes(data))
     assert event.is_set()  # waiter released despite the bug
+
+
+@pytest.mark.asyncio
+async def test_venty_connect_never_writes_status_mask(mock_bleak_client) -> None:
+    """Connect must not send cmd 0x01 with a non-zero write mask.
+
+    Byte 1 of a 0x01 packet is a write mask (0x02 = target temp, 0x04 = boost);
+    the old "start periodic updates" packet (0x01, 0x06) zeroed both on connect.
+    """
+    device = VentyDevice("AA:BB:CC:DD:EE:FF", client=mock_bleak_client)
+    mock_bleak_client.is_connected = False
+    device.update_state = AsyncMock()
+    sent: list[tuple[int, int]] = []
+
+    async def fake_send(cmd, mask=0, wait_response=True, timeout=2.0):
+        sent.append((cmd, mask))
+        if cmd == 0x02:
+            # Firmware response: application flag set, version "V1.2.3"
+            device._handle_main_notification(
+                bytes([0x02, 0x01]) + b"V1.2.3" + bytes(12)
+            )
+
+    device._send_command = fake_send
+
+    await device.connect()
+
+    assert all(mask == 0 for cmd, mask in sent if cmd == 0x01)
+    assert sent[:2] == [(0x02, 0), (0x1D, 0)]
+    assert sent[-1] == (0x30, 0x06)
+    assert device.application_firmware is True
+    assert device.state.firmware_version == "V1.2.3"
+
+
+@pytest.mark.asyncio
+async def test_venty_connect_skips_app_status_without_app_firmware(
+    mock_bleak_client,
+) -> None:
+    """Without the application-firmware flag, no 0x30 request is sent."""
+    device = VentyDevice("AA:BB:CC:DD:EE:FF", client=mock_bleak_client)
+    mock_bleak_client.is_connected = False
+    device.update_state = AsyncMock()
+    sent: list[int] = []
+
+    async def fake_send(cmd, mask=0, wait_response=True, timeout=2.0):
+        sent.append(cmd)
+
+    device._send_command = fake_send
+
+    await device.connect()
+
+    assert 0x30 not in sent
+    assert device.application_firmware is False
+
+
+def test_venty_firmware_version_skips_flag_byte() -> None:
+    """Byte 1 of the 0x02 response is a flag, not part of the version string."""
+    device = VentyDevice("AA:BB:CC:DD:EE:FF")
+    device._handle_main_notification(bytes([0x02, 0x01]) + b"V2.0.9" + bytes(12))
+    assert device.state.firmware_version == "V2.0.9"
+    assert device.application_firmware is True

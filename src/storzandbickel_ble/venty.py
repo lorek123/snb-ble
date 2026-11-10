@@ -16,15 +16,19 @@ from storzandbickel_ble.models import (
 from storzandbickel_ble.protocol import (
     TEMP_MAX_VENTY,
     TEMP_MIN_VENTY,
+    VENTY_APP_STATUS_SUBCMD_CONNECTION_INTERVAL,
     VENTY_CHAR_DEVICE_NAME,
     VENTY_CHAR_MAIN,
+    VENTY_CMD_APP_STATUS,
     VENTY_CMD_DEVICE_ANALYSIS,
     VENTY_CMD_FIND_DEVICE,
     VENTY_CMD_FIRMWARE_VERSION,
+    VENTY_CMD_INIT,
     VENTY_CMD_SERIAL_NUMBER,
     VENTY_CMD_SETTINGS,
     VENTY_CMD_STATUS_CONTROL,
     VENTY_CMD_USAGE_STATS,
+    VENTY_FIRMWARE_FLAG_APPLICATION,
     VENTY_MASK_BOOST_WRITE,
     VENTY_MASK_HEATER_WRITE,
     VENTY_MASK_SETTINGS_WRITE,
@@ -76,6 +80,8 @@ class VentyDevice(BaseDevice):
         )
         self._response_event: asyncio.Event | None = None
         self._response_data: bytearray | None = None
+        # Byte 1 of the 0x02 response; None until the firmware version is read.
+        self._application_firmware_flags: int | None = None
 
     @property
     def device_type(self) -> DeviceType:
@@ -116,14 +122,31 @@ class VentyDevice(BaseDevice):
             self._handle_main_notification,
         )
 
+        # Mirror the vendor app's connect sequence: 0x02 (firmware version, which
+        # also reports whether the application firmware is running), then 0x1D.
+        with self._tolerate("request firmware version"):
+            await self._send_command(VENTY_CMD_FIRMWARE_VERSION)
+        await self._send_command(VENTY_CMD_INIT, wait_response=False)
+
         # Read initial state
         await self.update_state()
 
-        # Start periodic updates (command 0x01 with byte 1 = 0x06)
-        await self._send_command(
-            VENTY_CMD_STATUS_CONTROL,
-            mask=0x06,  # Start periodic updates
-        )
+        # Request the connection interval / periodic status the way the vendor app
+        # does on application firmware (cmd 0x30, byte 1 = 0x06). This used to be
+        # sent as cmd 0x01 with byte 1 = 0x06, which the firmware reads as a write
+        # of target temperature (0x02) and boost offset (0x04) with zeroed values.
+        if self.application_firmware:
+            await self._send_command(
+                VENTY_CMD_APP_STATUS,
+                mask=VENTY_APP_STATUS_SUBCMD_CONNECTION_INTERVAL,
+                wait_response=False,
+            )
+
+    @property
+    def application_firmware(self) -> bool:
+        """Whether the device reported it is running application firmware."""
+        flags = self._application_firmware_flags
+        return flags is not None and bool(flags & VENTY_FIRMWARE_FLAG_APPLICATION)
 
     async def disconnect(self) -> None:
         """Disconnect from device."""
@@ -485,6 +508,7 @@ class VentyDevice(BaseDevice):
         state = self._get_state()
         try:
             data_array = bytearray(data)
+            _LOGGER.debug("Venty notification: %s", data_array.hex())
             cmd = data_array[0]
 
             if cmd == VENTY_CMD_STATUS_CONTROL:
@@ -541,9 +565,12 @@ class VentyDevice(BaseDevice):
                 )
 
             elif cmd == VENTY_CMD_FIRMWARE_VERSION:
-                # Parse firmware version
+                # Byte 1 = application-firmware flags, bytes 2-7 = version string
+                # (vendor app: applicationFirmwareQvap = byte 1, version = [2:8]).
                 if len(data_array) > 1:
-                    state.firmware_version = decode_string(data_array[1:])
+                    self._application_firmware_flags = data_array[1]
+                if len(data_array) > 2:
+                    state.firmware_version = decode_string(data_array[2:8])
 
             elif cmd == VENTY_CMD_SERIAL_NUMBER:
                 # Parse serial number

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Venty/Veazy: the connect sequence sent cmd `0x01` with byte 1 = `0x06` as "start periodic updates". Byte 1 of a `0x01` packet is the write mask (`0x02` target temperature, `0x04` boost offset), so every connect wrote zeroed target/boost values. Connect now mirrors the vendor app: `0x02`, `0x1D`, then (on application firmware) `0x30` with byte 1 = `0x06` (ha-snb#8).
+- Venty/Veazy: byte 1 of the `0x02` firmware response is the application-firmware flag, not part of the version string; exposed as `VentyDevice.application_firmware`.
+
+### Added
+- Venty/Veazy: raw notification payloads are logged (hex) at debug level, to diagnose device reports.
+
 ## [0.1.22] - 2026-11-10
 
 ### Fixed
