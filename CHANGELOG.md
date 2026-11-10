@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.22] - 2026-11-10
+
 ### Fixed
 - Volcano: status registers 2/3 are now changed with the firmware's 4-byte bit set/clear command (low 16 bits = mask, bit 16 = set) instead of writing a uint16 register image. The old write could disable Bluetooth when toggling vibration-on-ready.
 - Volcano: `display_on_cooling` and `vibration_on_ready` were decoded inverted — the register bits are disable flags.
