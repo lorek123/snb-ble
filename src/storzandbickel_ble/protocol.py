@@ -99,6 +99,10 @@ VENTY_CMD_USAGE_STATS = 0x04
 VENTY_CMD_SERIAL_NUMBER = 0x05
 VENTY_CMD_SETTINGS = 0x06
 VENTY_CMD_FIND_DEVICE = 0x13
+# Venty/Veazy do not report a current temperature over BLE: bytes 2-3 of the 0x01
+# status packet are 0x8000 (idle and heating, FW V01.11), and the vendor app hides
+# the current temperature for these models (qvap.js: hideCurrTemperature(true)).
+VENTY_TEMP_NOT_REPORTED = 0x8000
 VENTY_CMD_INIT = 0x1D  # sent by the vendor app right after 0x02 on connect
 # On application firmware the vendor app requests the connection interval /
 # periodic status with cmd 0x30, byte 1 = 0x06. Do NOT send this as cmd 0x01:

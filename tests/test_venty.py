@@ -310,3 +310,15 @@ def test_venty_firmware_version_skips_flag_byte() -> None:
     device._handle_main_notification(bytes([0x02, 0x01]) + b"V2.0.9" + bytes(12))
     assert device.state.firmware_version == "V2.0.9"
     assert device.application_firmware is True
+
+
+def test_venty_status_temperature_not_reported() -> None:
+    """Real FW V01.11 packet: current temperature is the 0x8000 sentinel."""
+    device = VentyDevice("AA:BB:CC:DD:EE:FF")
+    device._handle_main_notification(bytes.fromhex("0100008008070f0f317700010000d800"))
+    state = device.state
+    assert state.current_temperature is None
+    assert state.target_temperature == 180.0
+    assert state.battery_level == 49
+    assert state.heater_mode == HeaterMode.NORMAL
+    assert state.boost_offset == 15
