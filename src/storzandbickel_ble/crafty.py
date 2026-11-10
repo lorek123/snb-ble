@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import warnings
 
 from bleak import BleakClient
 
@@ -509,7 +510,18 @@ class CraftyDevice(BaseDevice):
         )
 
     async def toggle_boost_mode(self) -> None:
-        """Toggle boost mode on/off in the project status register."""
+        """Toggle boost mode on/off in the project status register.
+
+        Deprecated: the boost/superboost bits of char 0x93 are status the device
+        reports (set by its own button); the vendor app never writes them and the
+        firmware does not act on writes. Read ``state.boost_mode`` instead.
+        """
+        warnings.warn(
+            "CraftyDevice.toggle_boost_mode() has no effect on the device: boost is "
+            "only activated with the device button. It will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         try:
             data = await self._read_characteristic(CRAFTY_CHAR_PROJECT_STATUS)
             current_value = decode_uint16(data)
@@ -532,9 +544,15 @@ class CraftyDevice(BaseDevice):
     async def set_superboost(self, enabled: bool) -> None:
         """Enable or disable superboost mode.
 
-        Writes the SUPERBOOST_ENABLED bit in the project status register.
-        Note: superboost only activates while the heater is on and device is active.
+        Deprecated: like boost, superboost is reported status only and cannot be
+        activated over BLE. Read ``state.superboost_mode`` instead.
         """
+        warnings.warn(
+            "CraftyDevice.set_superboost() has no effect on the device: superboost "
+            "is only activated with the device button. It will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         try:
             data = await self._read_characteristic(CRAFTY_CHAR_PROJECT_STATUS)
             current_value = decode_uint16(data)

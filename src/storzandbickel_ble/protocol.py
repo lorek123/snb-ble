@@ -47,7 +47,10 @@ VOLCANO_CHAR_HEATER_OFF = "10110010-5354-4f52-5a26-4249434b454c"
 VOLCANO_CHAR_PUMP_ON = "10110013-5354-4f52-5a26-4249434b454c"
 VOLCANO_CHAR_PUMP_OFF = "10110014-5354-4f52-5a26-4249434b454c"
 VOLCANO_CHAR_LED_BRIGHTNESS = "10110005-5354-4f52-5a26-4249434b454c"
-VOLCANO_CHAR_AUTO_OFF = "1011000c-5354-4f52-5a26-4249434b454c"
+# Auto-off *setting* in seconds (read/write). The vendor app labels it "shut off".
+VOLCANO_CHAR_AUTO_OFF = "1011000d-5354-4f52-5a26-4249434b454c"
+# Live auto-off countdown in seconds (read/notify) — not the setting.
+VOLCANO_CHAR_AUTO_OFF_COUNTDOWN = "1011000c-5354-4f52-5a26-4249434b454c"
 VOLCANO_CHAR_HEATING_HOURS = "10110015-5354-4f52-5a26-4249434b454c"
 VOLCANO_CHAR_HEATING_MINUTES = "10110016-5354-4f52-5a26-4249434b454c"
 VOLCANO_CHAR_CODE_NUMBER = "10100011-5354-4f52-5a26-4249434b454c"  # For bootloader
@@ -62,11 +65,23 @@ VOLCANO_STATUS1_ERROR_BITS = 0x4018  # Bits 1, 2, 6, 14, 15
 
 # Volcano Status Register 2 bits
 VOLCANO_STATUS2_FAHRENHEIT = 0x0200  # Bit 9
+# Bit 12 is a *disable* flag: set = temperature NOT shown during cool-down.
 VOLCANO_STATUS2_DISPLAY_COOLING = 0x1000  # Bit 12
 VOLCANO_STATUS2_ERROR_BITS = 0x003B  # Bits 0-5, 10-11
 
 # Volcano Status Register 3 bits
+# Bit 10 is a *disable* flag: set = no vibration when the setpoint is reached.
 VOLCANO_STATUS3_VIBRATION_READY = 0x0400  # Bit 10
+
+# Volcano status registers 2/3 are not written back whole. The vendor app writes a
+# 4-byte LE command: the low 16 bits are the bit mask to change, and bit 16 selects
+# set (1) or clear (0). Writing a plain uint16 register image is misread by the
+# firmware (e.g. it disabled Bluetooth when toggling vibration).
+VOLCANO_REGISTER_SET_FLAG = 0x10000
+
+# Volcano LED brightness range (vendor app slider: 0-100, step 10)
+VOLCANO_LED_BRIGHTNESS_MIN = 0
+VOLCANO_LED_BRIGHTNESS_MAX = 100
 
 # Venty Service UUIDs
 VENTY_SERVICE_MAIN = "00000001-5354-4f52-5a26-4249434b454c"
@@ -225,6 +240,20 @@ def encode_uint16(value: int) -> bytes:
         2-byte little-endian encoded value
     """
     return bytes([value & 0xFF, (value >> 8) & 0xFF])
+
+
+def encode_volcano_register_bits(mask: int, set_bits: bool) -> bytes:
+    """Encode a Volcano status-register bit-change command.
+
+    Args:
+        mask: Bit mask (low 16 bits) to set or clear
+        set_bits: True to set the masked bits, False to clear them
+
+    Returns:
+        4-byte little-endian command
+    """
+    value = (mask & 0xFFFF) | (VOLCANO_REGISTER_SET_FLAG if set_bits else 0)
+    return value.to_bytes(4, "little")
 
 
 def decode_uint16(data: bytes | bytearray | Sequence[int]) -> int:

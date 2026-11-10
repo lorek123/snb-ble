@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Volcano: status registers 2/3 are now changed with the firmware's 4-byte bit set/clear command (low 16 bits = mask, bit 16 = set) instead of writing a uint16 register image. The old write could disable Bluetooth when toggling vibration-on-ready.
+- Volcano: `display_on_cooling` and `vibration_on_ready` were decoded inverted — the register bits are disable flags.
+- Volcano: LED brightness is 0-100 (vendor app slider, step 10), not 1-9.
+- Volcano: the auto-off *setting* is read/written on `1011000d`; `1011000c` is the live countdown, now exposed as `VolcanoState.auto_off_countdown`.
+
+### Deprecated
+- `CraftyDevice.toggle_boost_mode()` and `set_superboost()`: boost/superboost are status bits set by the device button; the firmware ignores BLE writes to them.
+
 ## [0.1.20] - 2026-06-29
 
 ### Added

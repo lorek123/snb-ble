@@ -12,6 +12,7 @@ from storzandbickel_ble.protocol import (
     TEMP_MAX_VOLCANO,
     TEMP_MIN_VOLCANO,
     VOLCANO_CHAR_AUTO_OFF,
+    VOLCANO_CHAR_AUTO_OFF_COUNTDOWN,
     VOLCANO_CHAR_CURRENT_TEMP,
     VOLCANO_CHAR_FIRMWARE_VERSION,
     VOLCANO_CHAR_HEATER_OFF,
@@ -28,6 +29,8 @@ from storzandbickel_ble.protocol import (
     VOLCANO_CHAR_STATUS_REGISTER_2,
     VOLCANO_CHAR_STATUS_REGISTER_3,
     VOLCANO_CHAR_TARGET_TEMP,
+    VOLCANO_LED_BRIGHTNESS_MAX,
+    VOLCANO_LED_BRIGHTNESS_MIN,
     VOLCANO_STATUS1_AUTO_SHUTDOWN,
     VOLCANO_STATUS1_ERROR_BITS,
     VOLCANO_STATUS1_HEATER_ON,
@@ -42,6 +45,7 @@ from storzandbickel_ble.protocol import (
     decode_uint16,
     encode_temperature,
     encode_uint16,
+    encode_volcano_register_bits,
     error_finding,
 )
 
@@ -93,11 +97,25 @@ class VolcanoDevice(BaseDevice):
         self._state = VolcanoState(
             current_temperature=None,
             target_temperature=None,
-            led_brightness=5,
+            led_brightness=50,
             auto_off_time=0,
+            auto_off_countdown=0,
             heating_hours=0,
             heating_minutes=0,
         )
+
+    @staticmethod
+    def _apply_status_register_2(state: VolcanoState, value: int) -> None:
+        """Decode status register 2. Display-on-cooling bit is inverted (set = off)."""
+        state.status_register_2 = value
+        state.fahrenheit_mode = bool(value & VOLCANO_STATUS2_FAHRENHEIT)
+        state.display_on_cooling = not bool(value & VOLCANO_STATUS2_DISPLAY_COOLING)
+
+    @staticmethod
+    def _apply_status_register_3(state: VolcanoState, value: int) -> None:
+        """Decode status register 3. Vibration-on-ready bit is inverted (set = off)."""
+        state.status_register_3 = value
+        state.vibration_on_ready = not bool(value & VOLCANO_STATUS3_VIBRATION_READY)
 
     @property
     def device_type(self) -> DeviceType:
@@ -159,6 +177,10 @@ class VolcanoDevice(BaseDevice):
             VOLCANO_CHAR_HEATING_MINUTES,
             self._handle_heating_minutes_notification,
         )
+        await self._start_notifications(
+            VOLCANO_CHAR_AUTO_OFF_COUNTDOWN,
+            self._handle_auto_off_countdown_notification,
+        )
 
     async def disconnect(self) -> None:
         """Disconnect from device."""
@@ -207,20 +229,11 @@ class VolcanoDevice(BaseDevice):
 
             with self._tolerate("read status register 2"):
                 data = await self._read_characteristic(VOLCANO_CHAR_STATUS_REGISTER_2)
-                state.status_register_2 = decode_uint16(data)
-                state.fahrenheit_mode = bool(
-                    state.status_register_2 & VOLCANO_STATUS2_FAHRENHEIT,
-                )
-                state.display_on_cooling = bool(
-                    state.status_register_2 & VOLCANO_STATUS2_DISPLAY_COOLING,
-                )
+                self._apply_status_register_2(state, decode_uint16(data))
 
             with self._tolerate("read status register 3"):
                 data = await self._read_characteristic(VOLCANO_CHAR_STATUS_REGISTER_3)
-                state.status_register_3 = decode_uint16(data)
-                state.vibration_on_ready = bool(
-                    state.status_register_3 & VOLCANO_STATUS3_VIBRATION_READY,
-                )
+                self._apply_status_register_3(state, decode_uint16(data))
 
             # Read LED brightness
             with self._tolerate("read LED brightness"):
@@ -231,6 +244,11 @@ class VolcanoDevice(BaseDevice):
             with self._tolerate("read auto-off time"):
                 data = await self._read_characteristic(VOLCANO_CHAR_AUTO_OFF)
                 state.auto_off_time = decode_uint16(data)
+
+            # Read auto-off countdown
+            with self._tolerate("read auto-off countdown"):
+                data = await self._read_characteristic(VOLCANO_CHAR_AUTO_OFF_COUNTDOWN)
+                state.auto_off_countdown = decode_uint16(data)
 
             # Read heating hours
             with self._tolerate("read heating hours"):
@@ -289,10 +307,13 @@ class VolcanoDevice(BaseDevice):
         """Set LED brightness.
 
         Args:
-            brightness: Brightness level (1-9)
+            brightness: Brightness in percent (0-100; the vendor app uses steps of 10)
         """
-        if brightness < 1 or brightness > 9:
-            msg = f"LED brightness must be between 1 and 9, got {brightness}"
+        if not VOLCANO_LED_BRIGHTNESS_MIN <= brightness <= VOLCANO_LED_BRIGHTNESS_MAX:
+            msg = (
+                f"LED brightness must be between {VOLCANO_LED_BRIGHTNESS_MIN} and "
+                f"{VOLCANO_LED_BRIGHTNESS_MAX}, got {brightness}"
+            )
             raise ValueError(msg)
         data = encode_uint16(brightness)
         await self._write_characteristic(VOLCANO_CHAR_LED_BRIGHTNESS, data)
@@ -313,60 +334,91 @@ class VolcanoDevice(BaseDevice):
         state = self._get_state()
         state.auto_off_time = seconds
 
+    async def _change_register_bits(
+        self, char_uuid: str, mask: int, set_bits: bool
+    ) -> None:
+        """Set or clear bits in status register 2/3 via the 4-byte command."""
+        await self._write_characteristic(
+            char_uuid, encode_volcano_register_bits(mask, set_bits)
+        )
+
+    async def _write_register_image(self, char_uuid: str, old: int, new: int) -> None:
+        """Move a register from ``old`` to ``new`` using set/clear commands."""
+        to_set = new & ~old & 0xFFFF
+        to_clear = old & ~new & 0xFFFF
+        if to_set:
+            await self._change_register_bits(char_uuid, to_set, True)
+        if to_clear:
+            await self._change_register_bits(char_uuid, to_clear, False)
+
     async def set_status_register_2(self, value: int) -> None:
         """Set status register 2 (display settings, etc.).
 
+        The firmware takes bit set/clear commands, not a register image, so this
+        sends the difference from the last known value.
+
         Args:
-            value: Status register 2 value
+            value: Desired status register 2 value
         """
-        data = encode_uint16(value)
-        await self._write_characteristic(VOLCANO_CHAR_STATUS_REGISTER_2, data)
         state = self._get_state()
-        state.status_register_2 = value
-        state.fahrenheit_mode = bool(value & VOLCANO_STATUS2_FAHRENHEIT)
-        state.display_on_cooling = bool(value & VOLCANO_STATUS2_DISPLAY_COOLING)
+        await self._write_register_image(
+            VOLCANO_CHAR_STATUS_REGISTER_2, state.status_register_2, value
+        )
+        self._apply_status_register_2(state, value)
 
     async def set_status_register_3(self, value: int) -> None:
         """Set status register 3 (vibration settings, etc.).
 
         Args:
-            value: Status register 3 value
+            value: Desired status register 3 value
         """
-        data = encode_uint16(value)
-        await self._write_characteristic(VOLCANO_CHAR_STATUS_REGISTER_3, data)
         state = self._get_state()
-        state.status_register_3 = value
-        state.vibration_on_ready = bool(value & VOLCANO_STATUS3_VIBRATION_READY)
+        await self._write_register_image(
+            VOLCANO_CHAR_STATUS_REGISTER_3, state.status_register_3, value
+        )
+        self._apply_status_register_3(state, value)
+
+    async def _set_register_bit(
+        self, char_uuid: str, mask: int, set_bits: bool
+    ) -> None:
+        state = self._get_state()
+        await self._change_register_bits(char_uuid, mask, set_bits)
+        if char_uuid == VOLCANO_CHAR_STATUS_REGISTER_2:
+            old = state.status_register_2
+            self._apply_status_register_2(
+                state, (old | mask) if set_bits else (old & ~mask)
+            )
+        else:
+            old = state.status_register_3
+            self._apply_status_register_3(
+                state, (old | mask) if set_bits else (old & ~mask)
+            )
 
     async def set_temperature_unit(self, unit: TemperatureUnit) -> None:
         """Set display temperature unit."""
-        state = self._get_state()
-        value = state.status_register_2
-        if unit == TemperatureUnit.FAHRENHEIT:
-            value |= VOLCANO_STATUS2_FAHRENHEIT
-        else:
-            value &= ~VOLCANO_STATUS2_FAHRENHEIT
-        await self.set_status_register_2(value)
+        await self._set_register_bit(
+            VOLCANO_CHAR_STATUS_REGISTER_2,
+            VOLCANO_STATUS2_FAHRENHEIT,
+            unit == TemperatureUnit.FAHRENHEIT,
+        )
 
     async def set_display_on_cooling(self, enabled: bool) -> None:
         """Enable/disable showing temperature during cool-down."""
-        state = self._get_state()
-        value = state.status_register_2
-        if enabled:
-            value |= VOLCANO_STATUS2_DISPLAY_COOLING
-        else:
-            value &= ~VOLCANO_STATUS2_DISPLAY_COOLING
-        await self.set_status_register_2(value)
+        # Inverted bit: set = disabled.
+        await self._set_register_bit(
+            VOLCANO_CHAR_STATUS_REGISTER_2,
+            VOLCANO_STATUS2_DISPLAY_COOLING,
+            not enabled,
+        )
 
     async def set_vibration_on_ready(self, enabled: bool) -> None:
         """Enable/disable vibration on setpoint reached."""
-        state = self._get_state()
-        value = state.status_register_3
-        if enabled:
-            value |= VOLCANO_STATUS3_VIBRATION_READY
-        else:
-            value &= ~VOLCANO_STATUS3_VIBRATION_READY
-        await self.set_status_register_3(value)
+        # Inverted bit: set = disabled.
+        await self._set_register_bit(
+            VOLCANO_CHAR_STATUS_REGISTER_3,
+            VOLCANO_STATUS3_VIBRATION_READY,
+            not enabled,
+        )
 
     async def run_workflow(
         self,
@@ -452,7 +504,7 @@ class VolcanoDevice(BaseDevice):
         state = self.state
         warnings: list[str] = []
 
-        if state.led_brightness < 3:
+        if state.led_brightness < 25:
             warnings.append("Display brightness is low.")
         if not state.display_on_cooling:
             warnings.append("Display-on-cooling is disabled.")
@@ -517,22 +569,13 @@ class VolcanoDevice(BaseDevice):
         """Handle status register 2 notification."""
         state = self._get_state()
         with self._tolerate("handle status register 2 notification"):
-            state.status_register_2 = decode_uint16(bytearray(data))
-            state.fahrenheit_mode = bool(
-                state.status_register_2 & VOLCANO_STATUS2_FAHRENHEIT,
-            )
-            state.display_on_cooling = bool(
-                state.status_register_2 & VOLCANO_STATUS2_DISPLAY_COOLING,
-            )
+            self._apply_status_register_2(state, decode_uint16(bytearray(data)))
 
     def _handle_status3_notification(self, data: bytes) -> None:
         """Handle status register 3 notification."""
         state = self._get_state()
         with self._tolerate("handle status register 3 notification"):
-            state.status_register_3 = decode_uint16(bytearray(data))
-            state.vibration_on_ready = bool(
-                state.status_register_3 & VOLCANO_STATUS3_VIBRATION_READY,
-            )
+            self._apply_status_register_3(state, decode_uint16(bytearray(data)))
 
     def _handle_heating_hours_notification(self, data: bytes) -> None:
         """Handle heating hours notification."""
@@ -545,3 +588,9 @@ class VolcanoDevice(BaseDevice):
         state = self._get_state()
         with self._tolerate("handle heating minutes notification"):
             state.heating_minutes = decode_uint16(bytearray(data))
+
+    def _handle_auto_off_countdown_notification(self, data: bytes) -> None:
+        """Handle auto-off countdown notification."""
+        state = self._get_state()
+        with self._tolerate("handle auto-off countdown notification"):
+            state.auto_off_countdown = decode_uint16(bytearray(data))

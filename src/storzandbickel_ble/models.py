@@ -47,8 +47,9 @@ class VolcanoState(DeviceState):
     target_temperature: float | None = Field(None, ge=40.0, le=230.0)
     heater_on: bool = False
     pump_on: bool = False
-    led_brightness: int = Field(5, ge=1, le=9)
-    auto_off_time: int = Field(0, ge=0)  # seconds
+    led_brightness: int = Field(50, ge=0, le=100)
+    auto_off_time: int = Field(0, ge=0)  # seconds (setting)
+    auto_off_countdown: int = Field(0, ge=0)  # seconds remaining
     heating_hours: int = Field(0, ge=0)
     heating_minutes: int = Field(0, ge=0, le=59)
     fahrenheit_mode: bool = False

@@ -20,6 +20,7 @@ from storzandbickel_ble.protocol import (
     VOLCANO_STATUS3_VIBRATION_READY,
     encode_temperature,
     encode_uint16,
+    encode_volcano_register_bits,
 )
 from storzandbickel_ble.volcano import VOLCANO_WORKFLOW_PRESETS, VolcanoDevice
 
@@ -93,7 +94,7 @@ async def test_volcano_set_temperature_unit(mock_bleak_client) -> None:
 
     mock_bleak_client.write_gatt_char.assert_called_with(
         VOLCANO_CHAR_STATUS_REGISTER_2,
-        encode_uint16(VOLCANO_STATUS2_FAHRENHEIT),
+        encode_volcano_register_bits(VOLCANO_STATUS2_FAHRENHEIT, True),
         response=False,
     )
 
@@ -109,7 +110,7 @@ async def test_volcano_set_display_on_cooling(mock_bleak_client) -> None:
 
     mock_bleak_client.write_gatt_char.assert_called_with(
         VOLCANO_CHAR_STATUS_REGISTER_2,
-        encode_uint16(VOLCANO_STATUS2_DISPLAY_COOLING),
+        encode_volcano_register_bits(VOLCANO_STATUS2_DISPLAY_COOLING, False),
         response=False,
     )
 
@@ -125,7 +126,7 @@ async def test_volcano_set_vibration_on_ready(mock_bleak_client) -> None:
 
     mock_bleak_client.write_gatt_char.assert_called_with(
         VOLCANO_CHAR_STATUS_REGISTER_3,
-        encode_uint16(VOLCANO_STATUS3_VIBRATION_READY),
+        encode_volcano_register_bits(VOLCANO_STATUS3_VIBRATION_READY, False),
         response=False,
     )
 
@@ -219,8 +220,8 @@ async def test_volcano_set_led_brightness_invalid(mock_bleak_client) -> None:
     device._connected = True
     mock_bleak_client.is_connected = True
 
-    with pytest.raises(ValueError, match="between 1 and 9"):
-        await device.set_led_brightness(10)
+    with pytest.raises(ValueError, match="between 0 and 100"):
+        await device.set_led_brightness(101)
 
 
 @pytest.mark.asyncio
