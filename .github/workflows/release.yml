@@ -18,24 +18,21 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7
+      # setup-uv installs Python itself (python-build-standalone), so this does not
+      # depend on actions/setup-python having a build for the runner's Ubuntu.
       - uses: astral-sh/setup-uv@v7
         with:
           version: "latest"
-      - uses: actions/setup-python@v7
-        with:
           python-version: "3.14.2"
-      - name: Install build dependencies
-        run: |
-          uv pip install --system build twine
       - name: Build package
         run: |
-          python -m build
+          uv build
       - name: Publish to PyPI
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
-          twine upload --skip-existing dist/*
+          uvx twine upload --skip-existing dist/*
       - name: Check if GitHub release already exists
         id: release_check
         env:
