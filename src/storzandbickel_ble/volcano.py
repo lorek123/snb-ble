@@ -43,7 +43,6 @@ from storzandbickel_ble.protocol import (
     decode_string,
     decode_temperature,
     decode_uint16,
-    encode_temperature,
     encode_uint16,
     encode_volcano_register_bits,
     error_finding,
@@ -274,7 +273,9 @@ class VolcanoDevice(BaseDevice):
             temperature: Temperature in Celsius (40-230°C)
         """
         temp = clamp_temperature(temperature, TEMP_MIN_VOLCANO, TEMP_MAX_VOLCANO)
-        data = encode_temperature(temp)
+        # The setpoint reads back as uint16 but the vendor app writes it as uint32
+        # (volcano.js: convertToUInt32BLE(val*10)).
+        data = int(temp * 10).to_bytes(4, "little")
         await self._write_characteristic(VOLCANO_CHAR_TARGET_TEMP, data)
         state = self._get_state()
         state.target_temperature = temp

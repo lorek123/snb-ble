@@ -424,6 +424,12 @@ class CraftyDevice(BaseDevice):
         await self._write_characteristic(CRAFTY_CHAR_TARGET_TEMP, data)
         state = self._get_state()
         state.target_temperature = temp
+        # The vendor app rewrites the boost offset right after every target write
+        # (crafty.js writeSollTemperatureCrafty); do the same so the device keeps it.
+        if state.boost_temperature is not None:
+            await self._write_characteristic(
+                CRAFTY_CHAR_BOOST_TEMP, encode_temperature(state.boost_temperature)
+            )
 
     async def set_boost_temperature(self, boost_temperature: float) -> None:
         """Set boost temperature offset (1-99°C)."""

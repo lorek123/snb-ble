@@ -337,3 +337,18 @@ def test_crafty_akku_status_1_notification_updates_charge_state() -> None:
     device._handle_akku_status_1_notification(encode_uint16(0x80D4))
     assert state.charging is False
     assert state.battery_full is True
+
+
+@pytest.mark.asyncio
+async def test_crafty_target_write_rewrites_boost(mock_bleak_client) -> None:
+    """Like the vendor app: target write is followed by a boost-offset write."""
+    device = CraftyDevice("AA:BB:CC:DD:EE:FF", client=mock_bleak_client)
+    device._connected = True
+    mock_bleak_client.is_connected = True
+    device.state.boost_temperature = 10.0
+
+    await device.set_target_temperature(185.0)
+
+    calls = mock_bleak_client.write_gatt_char.call_args_list
+    assert calls[-2].args[:2] == (CRAFTY_CHAR_TARGET_TEMP, encode_temperature(185.0))
+    assert calls[-1].args[:2] == (CRAFTY_CHAR_BOOST_TEMP, encode_temperature(10.0))
