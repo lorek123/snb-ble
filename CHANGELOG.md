@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+Found by cross-checking the vendor web app and other open-source S&B clients (orth4x0r/venty-android, andrzejdus/glow, SavageNL/home-assistant-volcano-hybrid, firsttris/reactive-volcano-app, Chuffnugget/volcano_integration):
+- Venty/Veazy: find device is cmd `0x0D` (was `0x13`, which did nothing).
+- Venty/Veazy: settings writes (unit, eco charge, eco voltage, boost visualization) now set the byte-15 change mask; without it the device ignored them.
+- Venty/Veazy: switching to boost/superboost no longer also writes the boost/superboost offset as 0.
+- Venty/Veazy: leaving boost/superboost turns the heater off before writing mode 1 (mode 1 alone does not end boost).
+- Venty/Veazy: serial number is bytes 15-16 + 9-14 of the `0x05` response; auto-shutoff adds bytes 9 + 10 like the vendor app; `VENTY_SERVICE_MAIN` is `00000000-…`.
+- Volcano: target temperature is written as uint32, like the vendor app.
+- Crafty: the boost offset is rewritten after every target write, like the vendor app.
+- Crafty: `setpoint_reached` now follows project status bit 8, which holds while at temperature (verified on a Crafty+, FW V04.26). Project status 2 bit 2 only pulses for ~2 s, so the Ready state was almost never seen (ha-snb#34).
+
 ### Changed
 - Venty/Veazy: the current-temperature bytes of the `0x01` status packet are `0x8000` ("not reported") on real devices, idle and heating (FW V01.11), and the vendor app hides the current temperature for these models. This is now handled explicitly as `None` instead of relying on the range check (the old "~3276 °C" reading in ha-snb#8).
 

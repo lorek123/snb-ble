@@ -40,6 +40,7 @@ from storzandbickel_ble.protocol import (
     CRAFTY_PROJECT_STATUS_ACTIVE,
     CRAFTY_PROJECT_STATUS_BOOST_ENABLED,
     CRAFTY_PROJECT_STATUS_ERROR_BITS,
+    CRAFTY_PROJECT_STATUS_READY,
     CRAFTY_PROJECT_STATUS_SUPERBOOST_ENABLED,
     CRAFTY_SICHERHEITSCODE,
     CRAFTY_STATUS_BOOST_MODE,
@@ -128,7 +129,19 @@ class CraftyDevice(BaseDevice):
         state.permanent_bluetooth = not bool(
             value & CRAFTY_PROJECT_STATUS2_AUTO_BLE_SHUTDOWN
         )
-        state.setpoint_reached = bool(value & CRAFTY_PROJECT_STATUS2_TEMP_REACHED)
+        CraftyDevice._apply_ready(state)
+
+    @staticmethod
+    def _apply_ready(state: CraftyState) -> None:
+        """At temperature: project status bit 8 (holds while at temperature).
+
+        Project status 2 bit 2 is kept as a fallback for older firmware that may not
+        set bit 8; on current firmware it only pulses for ~2 s, so pollers miss it.
+        """
+        state.setpoint_reached = bool(
+            state.project_status_register & CRAFTY_PROJECT_STATUS_READY
+            or state.project_status_register_2 & CRAFTY_PROJECT_STATUS2_TEMP_REACHED
+        )
 
     @staticmethod
     def _apply_charge_state(state: CraftyState) -> None:
@@ -349,6 +362,7 @@ class CraftyDevice(BaseDevice):
             with self._tolerate("read project status register"):
                 data = await self._read_characteristic(CRAFTY_CHAR_PROJECT_STATUS)
                 state.project_status_register = decode_uint16(data)
+                self._apply_ready(state)
                 state.device_active = bool(
                     state.project_status_register & CRAFTY_PROJECT_STATUS_ACTIVE,
                 )
@@ -592,6 +606,7 @@ class CraftyDevice(BaseDevice):
         state = self._get_state()
         state.boost_mode = enabled
         state.project_status_register = new_value
+        self._apply_ready(state)
 
     async def set_superboost(self, enabled: bool) -> None:
         """Enable or disable superboost mode.
@@ -622,6 +637,7 @@ class CraftyDevice(BaseDevice):
         state = self._get_state()
         state.superboost_mode = enabled
         state.project_status_register = new_value
+        self._apply_ready(state)
 
     async def find_device(self) -> None:
         """Trigger find device (vibration/LED alert, auto-clears after 30 s).
@@ -739,6 +755,7 @@ class CraftyDevice(BaseDevice):
         state = self._get_state()
         with self._tolerate("handle project status register notification"):
             state.project_status_register = decode_uint16(bytearray(data))
+            self._apply_ready(state)
             state.device_active = bool(
                 state.project_status_register & CRAFTY_PROJECT_STATUS_ACTIVE,
             )

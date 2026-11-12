@@ -190,6 +190,10 @@ CRAFTY_STATUS_FAHRENHEIT = 0x0008  # Bit 3
 CRAFTY_PROJECT_STATUS_ACTIVE = 0x0010  # Bit 4
 CRAFTY_PROJECT_STATUS_BOOST_ENABLED = 0x0020  # Bit 5
 CRAFTY_PROJECT_STATUS_SUPERBOOST_ENABLED = 0x0040  # Bit 6
+# Bit 8: at temperature, follows the device LED. Verified on a Crafty+ (FW V04.26):
+# set at 179.1/180 C and held, while project status 2 bit 2 ("reached", what the
+# vendor web app uses) cleared again 2.4 s later. Also found by andrzejdus/glow.
+CRAFTY_PROJECT_STATUS_READY = 0x0100
 
 # Crafty Project Status Register 2 bits
 CRAFTY_PROJECT_STATUS2_VIBRATION_DISABLED = (
