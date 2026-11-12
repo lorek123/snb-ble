@@ -255,20 +255,28 @@ class VentyDevice(BaseDevice):
         Args:
             mode: Heater mode (OFF, NORMAL, BOOST, SUPERBOOST)
         """
-        mask = VENTY_MASK_HEATER_WRITE
-        if mode == HeaterMode.BOOST:
-            mask |= VENTY_MASK_BOOST_WRITE
-        elif mode == HeaterMode.SUPERBOOST:
-            mask |= VENTY_MASK_SUPERBOOST_WRITE
+        state = self._get_state()
+        # Writing mode 1 does not end boost/superboost on a real Venty (the vendor
+        # app's power button writes 0 in any heating mode), so leave boost by
+        # switching the heater off first.
+        if mode == HeaterMode.NORMAL and state.heater_mode in (
+            HeaterMode.BOOST,
+            HeaterMode.SUPERBOOST,
+        ):
+            await self._write_heater_mode(HeaterMode.OFF)
+            await asyncio.sleep(0.3)
+        await self._write_heater_mode(mode)
+        state.heater_mode = mode
 
+    async def _write_heater_mode(self, mode: HeaterMode) -> None:
+        # Only the heater mask: adding the boost/superboost masks would also write
+        # bytes 6/7 (the offsets) as 0.
         packet = build_venty_command(
             VENTY_CMD_STATUS_CONTROL,
-            mask=mask,
+            mask=VENTY_MASK_HEATER_WRITE,
             heater_mode=mode.value,
         )
         await self._write_characteristic(VENTY_CHAR_MAIN, packet, response=False)
-        state = self._get_state()
-        state.heater_mode = mode
 
     async def turn_heater_on(self) -> None:
         """Turn heater on (normal mode)."""
@@ -316,113 +324,49 @@ class VentyDevice(BaseDevice):
         state = self._get_state()
         state.superboost_offset = offset
 
-    async def set_temperature_unit(self, unit: TemperatureUnit) -> None:
-        """Set temperature unit.
+    async def _write_setting_bit(self, bit: int, enabled: bool) -> None:
+        """Change one settings flag (cmd 0x01, mask 0x80).
 
-        Args:
-            unit: Temperature unit (CELSIUS or FAHRENHEIT)
+        Byte 14 carries the new value and byte 15 says which bits to change, as the
+        vendor app does; the device leaves every other setting alone.
         """
-        # Read current settings first
-        state = self._get_state()
-        current_settings = 0
-        if state.unit == TemperatureUnit.FAHRENHEIT:
-            current_settings |= VENTY_SETTING_UNIT
-
-        # Update unit bit
-        if unit == TemperatureUnit.FAHRENHEIT:
-            current_settings |= VENTY_SETTING_UNIT
-        else:
-            current_settings &= ~VENTY_SETTING_UNIT
-
         packet = build_venty_command(
             VENTY_CMD_STATUS_CONTROL,
             mask=VENTY_MASK_SETTINGS_WRITE,
-            settings=current_settings,
+            settings=bit if enabled else 0,
+            settings_mask=bit,
         )
         await self._write_characteristic(VENTY_CHAR_MAIN, packet, response=False)
-        state.unit = unit
+
+    async def set_temperature_unit(self, unit: TemperatureUnit) -> None:
+        """Set the display temperature unit (CELSIUS or FAHRENHEIT)."""
+        await self._write_setting_bit(
+            VENTY_SETTING_UNIT, unit == TemperatureUnit.FAHRENHEIT
+        )
+        self._get_state().unit = unit
 
     async def set_eco_mode_charge(self, enabled: bool) -> None:
-        """Set eco mode charge.
-
-        Args:
-            enabled: True to enable eco mode charge
-        """
-        # Read current settings first
-        state = self._get_state()
-        current_settings = 0
-        if state.eco_mode_charge:
-            current_settings |= VENTY_SETTING_ECO_MODE_CHARGE
-
-        # Update eco mode charge bit
-        if enabled:
-            current_settings |= VENTY_SETTING_ECO_MODE_CHARGE
-        else:
-            current_settings &= ~VENTY_SETTING_ECO_MODE_CHARGE
-
-        packet = build_venty_command(
-            VENTY_CMD_STATUS_CONTROL,
-            mask=VENTY_MASK_SETTINGS_WRITE,
-            settings=current_settings,
-        )
-        await self._write_characteristic(VENTY_CHAR_MAIN, packet, response=False)
-        state.eco_mode_charge = enabled
+        """Enable/disable ECO charge-current optimization."""
+        await self._write_setting_bit(VENTY_SETTING_ECO_MODE_CHARGE, enabled)
+        self._get_state().eco_mode_charge = enabled
 
     async def set_eco_mode_voltage(self, enabled: bool) -> None:
-        """Set eco mode voltage.
-
-        Args:
-            enabled: True to enable eco mode voltage
-        """
-        # Read current settings first
-        state = self._get_state()
-        current_settings = 0
-        if state.eco_mode_voltage:
-            current_settings |= VENTY_SETTING_ECO_MODE_VOLTAGE
-
-        # Update eco mode voltage bit
-        if enabled:
-            current_settings |= VENTY_SETTING_ECO_MODE_VOLTAGE
-        else:
-            current_settings &= ~VENTY_SETTING_ECO_MODE_VOLTAGE
-
-        packet = build_venty_command(
-            VENTY_CMD_STATUS_CONTROL,
-            mask=VENTY_MASK_SETTINGS_WRITE,
-            settings=current_settings,
-        )
-        await self._write_characteristic(VENTY_CHAR_MAIN, packet, response=False)
-        state.eco_mode_voltage = enabled
+        """Enable/disable the ECO charge-voltage limit."""
+        await self._write_setting_bit(VENTY_SETTING_ECO_MODE_VOLTAGE, enabled)
+        self._get_state().eco_mode_voltage = enabled
 
     async def set_boost_visualization(self, enabled: bool) -> None:
-        """Set boost visualization.
+        """Enable/disable boost visualization on the display.
 
-        Args:
-            enabled: True to enable boost visualization
+        The raw bit is inverted on the Veazy (vendor app); callers pass the
+        user-facing value for a Venty.
         """
-        # Read current settings first
-        state = self._get_state()
-        current_settings = 0
-        if state.boost_visualization:
-            current_settings |= VENTY_SETTING_BOOST_VISUALIZATION
-
-        # Update boost visualization bit
-        if enabled:
-            current_settings |= VENTY_SETTING_BOOST_VISUALIZATION
-        else:
-            current_settings &= ~VENTY_SETTING_BOOST_VISUALIZATION
-
-        packet = build_venty_command(
-            VENTY_CMD_STATUS_CONTROL,
-            mask=VENTY_MASK_SETTINGS_WRITE,
-            settings=current_settings,
-        )
-        await self._write_characteristic(VENTY_CHAR_MAIN, packet, response=False)
-        state.boost_visualization = enabled
+        await self._write_setting_bit(VENTY_SETTING_BOOST_VISUALIZATION, enabled)
+        self._get_state().boost_visualization = enabled
 
     async def find_device(self) -> None:
         """Trigger find device (vibration/LED alert)."""
-        packet = build_venty_command(VENTY_CMD_FIND_DEVICE)
+        packet = build_venty_command(VENTY_CMD_FIND_DEVICE, mask=0x01)
         await self._write_characteristic(VENTY_CHAR_MAIN, packet, response=False)
 
     async def set_brightness(self, brightness: int) -> None:
@@ -525,7 +469,8 @@ class VentyDevice(BaseDevice):
                 boost_offset = data_array[6]
                 superboost_offset = data_array[7]
                 battery = data_array[8]
-                auto_shutoff = data_array[9] | (data_array[10] << 8)
+                # The vendor app adds the two bytes rather than reading a uint16.
+                auto_shutoff = data_array[9] + data_array[10]
                 heater_mode = data_array[11]
                 charger_connected = data_array[13] if len(data_array) > 13 else 0
                 settings = data_array[14] if len(data_array) > 14 else 0
@@ -578,9 +523,11 @@ class VentyDevice(BaseDevice):
                     state.firmware_version = decode_string(data_array[2:8])
 
             elif cmd == VENTY_CMD_SERIAL_NUMBER:
-                # Parse serial number
-                if len(data_array) > 1:
-                    state.serial_number = decode_string(data_array[1:])
+                # Serial = model prefix (bytes 15-16) + bytes 9-14, as in qvap.js.
+                if len(data_array) > 16:
+                    state.serial_number = decode_string(
+                        bytes(data_array[15:17]) + bytes(data_array[9:15])
+                    )
 
             elif cmd == VENTY_CMD_SETTINGS:
                 if len(data_array) > 2:

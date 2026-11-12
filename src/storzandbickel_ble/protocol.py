@@ -84,7 +84,7 @@ VOLCANO_LED_BRIGHTNESS_MIN = 0
 VOLCANO_LED_BRIGHTNESS_MAX = 100
 
 # Venty Service UUIDs
-VENTY_SERVICE_MAIN = "00000001-5354-4f52-5a26-4249434b454c"
+VENTY_SERVICE_MAIN = "00000000-5354-4f52-5a26-4249434b454c"  # qvap service (main.js)
 VENTY_SERVICE_GENERIC_ACCESS = "00001800-0000-1000-8000-00805f9b34fb"
 
 # Venty Characteristic UUIDs
@@ -98,7 +98,7 @@ VENTY_CMD_DEVICE_ANALYSIS = 0x03
 VENTY_CMD_USAGE_STATS = 0x04
 VENTY_CMD_SERIAL_NUMBER = 0x05
 VENTY_CMD_SETTINGS = 0x06
-VENTY_CMD_FIND_DEVICE = 0x13
+VENTY_CMD_FIND_DEVICE = 0x0D  # decimal 13 in qvap.js findMyQvap(), byte 1 = 1
 # Venty/Veazy do not report a current temperature over BLE: bytes 2-3 of the 0x01
 # status packet are 0x8000 (idle and heating, FW V01.11), and the vendor app hides
 # the current temperature for these models (qvap.js: hideCurrTemperature(true)).
@@ -190,6 +190,10 @@ CRAFTY_STATUS_FAHRENHEIT = 0x0008  # Bit 3
 CRAFTY_PROJECT_STATUS_ACTIVE = 0x0010  # Bit 4
 CRAFTY_PROJECT_STATUS_BOOST_ENABLED = 0x0020  # Bit 5
 CRAFTY_PROJECT_STATUS_SUPERBOOST_ENABLED = 0x0040  # Bit 6
+# Bit 8: at temperature, follows the device LED. Verified on a Crafty+ (FW V04.26):
+# set at 179.1/180 C and held, while project status 2 bit 2 ("reached", what the
+# vendor web app uses) cleared again 2.4 s later. Also found by andrzejdus/glow.
+CRAFTY_PROJECT_STATUS_READY = 0x0100
 
 # Crafty Project Status Register 2 bits
 CRAFTY_PROJECT_STATUS2_VIBRATION_DISABLED = (
@@ -401,6 +405,7 @@ def build_venty_command(
     heater_mode: int | None = None,
     charger_connected: int | None = None,
     settings: int | None = None,
+    settings_mask: int | None = None,
 ) -> bytearray:
     """Build a Venty command packet (20 bytes).
 
@@ -416,6 +421,8 @@ def build_venty_command(
         heater_mode: Heater mode 0-3 (byte 11)
         charger_connected: Charger connected 0/1 (byte 13)
         settings: Settings bit flags (byte 14)
+        settings_mask: Which settings bits to change (byte 15). The device only
+            applies bits set here; without it a settings write changes nothing.
 
     Returns:
         20-byte command packet
@@ -453,5 +460,8 @@ def build_venty_command(
 
     if settings is not None:
         packet[14] = settings
+
+    if settings_mask is not None:
+        packet[15] = settings_mask
 
     return packet

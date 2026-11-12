@@ -337,3 +337,46 @@ def test_crafty_akku_status_1_notification_updates_charge_state() -> None:
     device._handle_akku_status_1_notification(encode_uint16(0x80D4))
     assert state.charging is False
     assert state.battery_full is True
+
+
+@pytest.mark.asyncio
+async def test_crafty_target_write_rewrites_boost(mock_bleak_client) -> None:
+    """Like the vendor app: target write is followed by a boost-offset write."""
+    device = CraftyDevice("AA:BB:CC:DD:EE:FF", client=mock_bleak_client)
+    device._connected = True
+    mock_bleak_client.is_connected = True
+    device.state.boost_temperature = 10.0
+
+    await device.set_target_temperature(185.0)
+
+    calls = mock_bleak_client.write_gatt_char.call_args_list
+    assert calls[-2].args[:2] == (CRAFTY_CHAR_TARGET_TEMP, encode_temperature(185.0))
+    assert calls[-1].args[:2] == (CRAFTY_CHAR_BOOST_TEMP, encode_temperature(10.0))
+
+
+# Captured on a Crafty+ (FW V04.26) heating to 180 C: (0x93, 0x1c3) -> ready
+@pytest.mark.parametrize(
+    ("status", "status2", "ready"),
+    [
+        pytest.param(0x0415, 0x0000, False, id="heating-84C"),
+        pytest.param(0x0515, 0x0084, True, id="reached-179C-pulse"),
+        pytest.param(0x0515, 0x0080, True, id="ready-after-pulse-cleared"),
+        pytest.param(0x0415, 0x0080, False, id="dipped-177C"),
+        pytest.param(0x0000, 0x0004, True, id="legacy-fallback-bit2"),
+    ],
+)
+def test_crafty_ready_from_project_status_bit8(status, status2, ready) -> None:
+    device = CraftyDevice("AA:BB:CC:DD:EE:FF")
+    state = device.state
+    state.project_status_register_2 = status2
+    state.project_status_register = status
+    CraftyDevice._apply_ready(state)
+    assert state.setpoint_reached is ready
+
+
+def test_crafty_project_status_notification_sets_ready() -> None:
+    device = CraftyDevice("AA:BB:CC:DD:EE:FF")
+    device._handle_project_status_notification(encode_uint16(0x0515))
+    assert device.state.setpoint_reached is True
+    device._handle_project_status_notification(encode_uint16(0x0415))
+    assert device.state.setpoint_reached is False

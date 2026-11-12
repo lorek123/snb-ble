@@ -18,7 +18,6 @@ from storzandbickel_ble.protocol import (
     VOLCANO_STATUS2_DISPLAY_COOLING,
     VOLCANO_STATUS2_FAHRENHEIT,
     VOLCANO_STATUS3_VIBRATION_READY,
-    encode_temperature,
     encode_uint16,
     encode_volcano_register_bits,
 )
@@ -48,7 +47,8 @@ async def test_volcano_set_target_temperature(mock_bleak_client) -> None:
 
     await device.set_target_temperature(185.0)
 
-    expected_data = encode_temperature(185.0)
+    # Written as uint32 like the vendor app, read back as uint16.
+    expected_data = (1850).to_bytes(4, "little")
     mock_bleak_client.write_gatt_char.assert_called_with(
         VOLCANO_CHAR_TARGET_TEMP,
         expected_data,

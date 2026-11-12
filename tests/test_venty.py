@@ -322,3 +322,96 @@ def test_venty_status_temperature_not_reported() -> None:
     assert state.battery_level == 49
     assert state.heater_mode == HeaterMode.NORMAL
     assert state.boost_offset == 15
+
+
+def _writes(mock_bleak_client) -> list[bytes]:
+    return [bytes(c.args[1]) for c in mock_bleak_client.write_gatt_char.call_args_list]
+
+
+def _connected_venty(mock_bleak_client) -> VentyDevice:
+    device = VentyDevice("AA:BB:CC:DD:EE:FF", client=mock_bleak_client)
+    device._connected = True
+    mock_bleak_client.is_connected = True
+    return device
+
+
+@pytest.mark.asyncio
+async def test_venty_find_device_uses_0x0d(mock_bleak_client) -> None:
+    device = _connected_venty(mock_bleak_client)
+    await device.find_device()
+    assert _writes(mock_bleak_client)[-1][:2] == bytes([0x0D, 0x01])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method", "bit"),
+    [
+        ("set_eco_mode_charge", 0x08),
+        ("set_eco_mode_voltage", 0x20),
+        ("set_boost_visualization", 0x40),
+    ],
+)
+async def test_venty_settings_write_sets_byte15_mask(
+    mock_bleak_client, method, bit
+) -> None:
+    device = _connected_venty(mock_bleak_client)
+    await getattr(device, method)(True)
+    on = _writes(mock_bleak_client)[-1]
+    await getattr(device, method)(False)
+    off = _writes(mock_bleak_client)[-1]
+    assert (on[0], on[1], on[14], on[15]) == (0x01, 0x80, bit, bit)
+    assert (off[0], off[1], off[14], off[15]) == (0x01, 0x80, 0x00, bit)
+
+
+@pytest.mark.asyncio
+async def test_venty_temperature_unit_write_masks_only_unit(mock_bleak_client) -> None:
+    from storzandbickel_ble.models import TemperatureUnit
+
+    device = _connected_venty(mock_bleak_client)
+    await device.set_temperature_unit(TemperatureUnit.FAHRENHEIT)
+    pkt = _writes(mock_bleak_client)[-1]
+    assert (pkt[1], pkt[14], pkt[15]) == (0x80, 0x01, 0x01)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", [HeaterMode.BOOST, HeaterMode.SUPERBOOST])
+async def test_venty_boost_mode_does_not_zero_offsets(mock_bleak_client, mode) -> None:
+    device = _connected_venty(mock_bleak_client)
+    await device.set_heater_mode(mode)
+    pkt = _writes(mock_bleak_client)[-1]
+    assert pkt[1] == 0x20  # heater mask only, no boost/superboost offset masks
+    assert pkt[11] == mode.value
+
+
+@pytest.mark.asyncio
+async def test_venty_leaving_boost_turns_heater_off_first(mock_bleak_client) -> None:
+    device = _connected_venty(mock_bleak_client)
+    device.state.heater_mode = HeaterMode.BOOST
+    await device.set_heater_mode(HeaterMode.NORMAL)
+    modes = [p[11] for p in _writes(mock_bleak_client)]
+    assert modes[-2:] == [HeaterMode.OFF.value, HeaterMode.NORMAL.value]
+    assert device.state.heater_mode == HeaterMode.NORMAL
+
+
+@pytest.mark.asyncio
+async def test_venty_normal_from_off_is_a_single_write(mock_bleak_client) -> None:
+    device = _connected_venty(mock_bleak_client)
+    await device.set_heater_mode(HeaterMode.NORMAL)
+    assert [p[11] for p in _writes(mock_bleak_client)] == [HeaterMode.NORMAL.value]
+
+
+def test_venty_serial_from_real_identity_packet() -> None:
+    """Captured 0x05 response (ha-snb#8): serial = bytes 15-16 + 9-14."""
+    device = VentyDevice("AA:BB:CC:DD:EE:FF")
+    device._handle_main_notification(
+        bytes.fromhex("0500000000000000003643464c593756590fff")
+    )
+    assert device.state.serial_number == "VY6CFLY7"
+
+
+def test_venty_auto_shutoff_adds_bytes_like_vendor_app() -> None:
+    device = VentyDevice("AA:BB:CC:DD:EE:FF")
+    pkt = bytearray.fromhex("0100008008070f0f317700010000d800")
+    pkt[9], pkt[10] = 200, 3
+    device._handle_main_notification(bytes(pkt))
+    assert device.state.auto_shutoff_countdown == 203

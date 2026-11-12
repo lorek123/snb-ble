@@ -20,11 +20,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      # setup-uv installs Python itself (python-build-standalone), so this does not
+      # depend on actions/setup-python having a build for the runner's Ubuntu.
       - uses: astral-sh/setup-uv@v7
         with:
           version: "latest"
-      - uses: actions/setup-python@v7
-        with:
           python-version: "3.14.2"
       - name: Set up Python venv for uv
         run: uv venv
@@ -46,11 +46,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      # setup-uv installs Python itself (python-build-standalone), so this does not
+      # depend on actions/setup-python having a build for the runner's Ubuntu.
       - uses: astral-sh/setup-uv@v7
         with:
           version: "latest"
-      - uses: actions/setup-python@v7
-        with:
           python-version: "3.14.2"
       - name: Set up Python venv for uv
         run: uv venv
@@ -68,11 +68,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      # setup-uv installs Python itself (python-build-standalone), so this does not
+      # depend on actions/setup-python having a build for the runner's Ubuntu.
       - uses: astral-sh/setup-uv@v7
         with:
           version: "latest"
-      - uses: actions/setup-python@v7
-        with:
           python-version: "3.14.2"
       - name: Set up Python venv for uv
         run: uv venv
