@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.25] - 2026-11-12
+
 ### Fixed
 Found by cross-checking the vendor web app and other open-source S&B clients (orth4x0r/venty-android, andrzejdus/glow, SavageNL/home-assistant-volcano-hybrid, firsttris/reactive-volcano-app, Chuffnugget/volcano_integration):
 - Venty/Veazy: find device is cmd `0x0D` (was `0x13`, which did nothing).
